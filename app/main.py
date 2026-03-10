@@ -1,0 +1,47 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+FastAPI 应用入口
+"""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .api.extract import router as extract_router
+from .api.search import router as search_router
+
+# 创建 FastAPI 应用
+app = FastAPI(
+    title="CMAP L1000 API",
+    description="CMAP L1000 基因表达数据检索服务",
+    version="1.0.0"
+)
+
+# 配置 CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 注册路由
+app.include_router(extract_router, prefix="/api/v1", tags=["特征提取"])
+app.include_router(search_router, prefix="/api/v1", tags=["疾病逆转匹配"])
+
+
+@app.get("/")
+async def root():
+    """根路径"""
+    return {
+        "message": "CMAP L1000 API 服务运行中",
+        "docs": "/docs",
+        "version": "1.0.0"
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """健康检查"""
+    return {"status": "healthy"}
