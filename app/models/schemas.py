@@ -49,4 +49,5 @@ class SearchResponse(BaseModel):
     """疾病逆转匹配响应"""
     query_up_count: int          # 查询中上调基因数量
     query_down_count: int        # 查询中下调基因数量
-    results: List[SearchResult]  # Top-K 结果列表
+    top_results: List[SearchResult]     # Top-K 结果（最能逆转，最负）
+    bottom_results: List[SearchResult]  # Bottom-K 结果（最相似，最正）

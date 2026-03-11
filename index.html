@@ -304,8 +304,8 @@
                                 <div class="mb-3">
                                     <label class="form-label">结果数量</label>
                                     <select v-model="searchForm.topK" class="form-control">
-                                        <option :value="10">Top 10</option>
-                                        <option :value="50">Top 50</option>
+                                        <option :value="50">Top 50 + Bottom 50</option>
+                                        <option :value="100">Top 100 + Bottom 100</option>
                                     </select>
                                 </div>
 
@@ -321,7 +321,7 @@
                                     输入错误：{{ searchError }}
                                 </div>
 
-                                <div v-if="searchResults.length > 0" class="stats-line">
+                                <div v-if="searchTopResults.length > 0" class="stats-line">
                                     上调：{{ searchStats.upCount }}个 | 下调：{{ searchStats.downCount }}个
                                 </div>
                             </div>
@@ -329,10 +329,19 @@
                     </div>
 
                     <div class="col-lg-7">
-                        <div v-if="searchResults.length > 0" class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <span>结果</span>
-                                <span style="color:var(--text-secondary);font-size:0.8125rem;">共{{ searchResults.length }}条</span>
+                        <div v-if="searchTopResults.length > 0" class="card">
+                            <div class="card-header" style="display:flex;gap:1rem;align-items:center;">
+                                <span
+                                    @click="searchViewMode = 'top'"
+                                    :style="{cursor:'pointer',color:searchViewMode==='top'?'var(--primary)':'var(--text-secondary)'}">
+                                    最能逆转({{ searchTopResults.length }})
+                                </span>
+                                <span style="color:var(--border)">|</span>
+                                <span
+                                    @click="searchViewMode = 'bottom'"
+                                    :style="{cursor:'pointer',color:searchViewMode==='bottom'?'var(--primary)':'var(--text-secondary)'}">
+                                    最相似({{ searchBottomResults.length }})
+                                </span>
                             </div>
                             <div class="table-responsive">
                                 <table class="table">
@@ -345,7 +354,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="result in searchResults" :key="result.rank">
+                                        <tr v-for="result in currentSearchResults" :key="result.rank">
                                             <td>
                                                 <div class="rank" :class="getRankClass(result.rank)">
                                                     {{ result.rank }}
@@ -468,7 +477,9 @@
                 searchForm: { upGenes: '', downGenes: '', topK: 50 },
                 isSearching: false,
                 searchError: '',
-                searchResults: [],
+                searchTopResults: [],
+                searchBottomResults: [],
+                searchViewMode: 'top',
                 searchStats: { upCount: 0, downCount: 0 },
                 extractForm: { drug: '', cellLine: '', dose: '' },
                 isExtracting: false,
@@ -479,6 +490,9 @@
                 canSearch() {
                     return this.countValidGenes(this.searchForm.upGenes) > 0 &&
                            this.countValidGenes(this.searchForm.downGenes) > 0;
+                },
+                currentSearchResults() {
+                    return this.searchViewMode === 'top' ? this.searchTopResults : this.searchBottomResults;
                 }
             },
             methods: {
@@ -509,7 +523,9 @@
 
                     this.isSearching = true;
                     this.searchError = '';
-                    this.searchResults = [];
+                    this.searchTopResults = [];
+                    this.searchBottomResults = [];
+                    this.searchViewMode = 'top';
 
                     try {
                         const res = await fetch('http://localhost:8000/api/v1/search', {
@@ -519,7 +535,8 @@
                         });
                         if (!res.ok) throw new Error((await res.json()).detail || '搜索失败');
                         const data = await res.json();
-                        this.searchResults = data.results;
+                        this.searchTopResults = data.top_results;
+                        this.searchBottomResults = data.bottom_results;
                         this.searchStats = { upCount: data.query_up_count, downCount: data.query_down_count };
                     } catch (e) {
                         this.searchError = e.message || '请求失败';

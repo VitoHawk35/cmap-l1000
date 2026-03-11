@@ -141,3 +141,61 @@ class CosineScorer(BaseScorer):
         indices = [p[1] for p in heap]
 
         return indices, scores
+
+    def top_k_both(
+        self,
+        query: np.ndarray,
+        candidate_iterator,
+        k: int = 100
+    ) -> Tuple[List[int], List[float], List[int], List[float]]:
+        """
+        同时获取 Top-K 最负和 Bottom-K 最正的分数
+
+        Args:
+            query: shape=(N_GENES,) 的查询向量
+            candidate_iterator: 生成器
+            k: 返回 K 个
+
+        Returns:
+            (top_indices, top_scores, bottom_indices, bottom_scores)
+            top: 最负的（最能逆转）
+            bottom: 最正的（最相似/加重）
+        """
+        import heapq
+
+        # 最小堆：保存最负的（score小的）
+        top_heap = []  # (score, idx)，取最小的k个
+
+        # 最大堆：保存最正的（score大的）
+        # Python heapq是最小堆，存负数实现最大堆
+        bottom_heap = []  # (-score, idx)，取最大的k个
+
+        for start_idx, end_idx, data in candidate_iterator:
+            batch_scores = self.score(query, data)
+
+            for i, score in enumerate(batch_scores):
+                idx = start_idx + i
+
+                # Top 堆（最负的）
+                if len(top_heap) < k:
+                    heapq.heappush(top_heap, (-score, idx))  # 存负数，最大堆取最负
+                elif -score > top_heap[0][0]:  # 更负
+                    heapq.heapreplace(top_heap, (-score, idx))
+
+                # Bottom 堆（最正的）
+                if len(bottom_heap) < k:
+                    heapq.heappush(bottom_heap, (score, idx))
+                elif score > bottom_heap[0][0]:  # 更正
+                    heapq.heapreplace(bottom_heap, (score, idx))
+
+        # 处理 Top 结果（最负的）
+        top_heap.sort(reverse=True)  # 负数大的在前（即score小的在前）
+        top_scores = [-p[0] for p in top_heap]
+        top_indices = [p[1] for p in top_heap]
+
+        # 处理 Bottom 结果（最正的）
+        bottom_heap.sort(reverse=True)  # 正数大的在前
+        bottom_scores = [p[0] for p in bottom_heap]
+        bottom_indices = [p[1] for p in bottom_heap]
+
+        return top_indices, top_scores, bottom_indices, bottom_scores

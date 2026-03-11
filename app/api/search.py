@@ -91,21 +91,34 @@ async def search_reversals(request: SearchRequest):
             detail="查询向量全为零，请检查基因 ID 是否有效"
         )
 
-    # 2. 批量计算全库分数
+    # 2. 批量计算全库分数（同时获取最负和最正）
     batch_iterator = matrix_store.get_batch_iterator(batch_size=10000)
-    top_indices, top_scores = scorer.top_k(
+    top_indices, top_scores, bottom_indices, bottom_scores = scorer.top_k_both(
         query_vector,
         batch_iterator,
         k=request.top_k
     )
 
     # 3. 获取元数据
-    sig_metadata_list = metadata_index.get_by_indices(top_indices)
+    top_metadata = metadata_index.get_by_indices(top_indices)
+    bottom_metadata = metadata_index.get_by_indices(bottom_indices)
 
-    # 4. 组装结果
-    results = []
-    for rank, (sig, score) in enumerate(zip(sig_metadata_list, top_scores), 1):
-        results.append(SearchResult(
+    # 4. 组装 Top 结果（最能逆转）
+    top_results = []
+    for rank, (sig, score) in enumerate(zip(top_metadata, top_scores), 1):
+        top_results.append(SearchResult(
+            rank=rank,
+            sig_id=sig.sig_id,
+            drug=sig.pert_iname,
+            cell_line=sig.cell_id,
+            dose=sig.pert_idose,
+            score=float(score)
+        ))
+
+    # 5. 组装 Bottom 结果（最相似）
+    bottom_results = []
+    for rank, (sig, score) in enumerate(zip(bottom_metadata, bottom_scores), 1):
+        bottom_results.append(SearchResult(
             rank=rank,
             sig_id=sig.sig_id,
             drug=sig.pert_iname,
@@ -117,5 +130,6 @@ async def search_reversals(request: SearchRequest):
     return SearchResponse(
         query_up_count=len(request.up_genes),
         query_down_count=len(request.down_genes),
-        results=results
+        top_results=top_results,
+        bottom_results=bottom_results
     )
