@@ -54,7 +54,7 @@ class MetadataIndex:
 
     def _load_sig_info(self) -> pd.DataFrame:
         """加载 sig_info 文件"""
-        df = pd.read_csv(SIG_INFO_PATH, sep='\t', compression='gzip')
+        df = pd.read_csv(SIG_INFO_PATH, sep='\t', compression='gzip', low_memory=False)
 
         # 确保必要的列存在
         required_cols = ['sig_id', 'pert_iname', 'cell_id', 'pert_idose']

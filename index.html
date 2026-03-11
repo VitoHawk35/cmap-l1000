@@ -15,6 +15,7 @@
             --text-secondary: #94a3b8;
             --border: #334155;
             --success: #10b981;
+            --warning: #f59e0b;
             --danger: #ef4444;
         }
 
@@ -274,6 +275,61 @@
             <div v-if="activeTab === 'search'">
                 <div class="row">
                     <div class="col-lg-5">
+                        <!-- CSV 上传卡片 -->
+                        <div class="card mb-3">
+                            <div class="card-header">CSV 差异基因文件解析</div>
+                            <div class="card-body p-3">
+                                <p class="guide-text">
+                                    上传生信软件输出的 CSV 文件，自动提取上下调基因
+                                </p>
+
+                                <div class="mb-3">
+                                    <label class="form-label">选择 CSV 文件</label>
+                                    <input
+                                        type="file"
+                                        ref="csvFileInput"
+                                        @change="handleCsvFileSelect"
+                                        accept=".csv"
+                                        class="form-control">
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label">P-Value 阈值</label>
+                                        <select v-model="csvForm.pvalueThreshold" class="form-control">
+                                            <option :value="0.05">0.05</option>
+                                            <option :value="0.01">0.01</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">Top N</label>
+                                        <input
+                                            v-model.number="csvForm.topN"
+                                            type="number"
+                                            min="10"
+                                            max="500"
+                                            class="form-control">
+                                    </div>
+                                </div>
+
+                                <button
+                                    @click="parseCsvFile"
+                                    :disabled="isParsingCsv || !csvForm.file"
+                                    class="btn btn-primary w-100">
+                                    <span v-if="isParsingCsv" class="spinner"></span>
+                                    {{ isParsingCsv ? '解析中…' : '上传并自动解析' }}
+                                </button>
+
+                                <div v-if="csvError" class="alert-error">
+                                    {{ csvError }}
+                                </div>
+
+                                <div v-if="csvWarning" style="color:var(--warning);font-size:0.75rem;margin-top:0.5rem;">
+                                    {{ csvWarning }}
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="card mb-3">
                             <div class="card-header">输入疾病特征基因</div>
                             <div class="card-body p-3">
@@ -330,18 +386,24 @@
 
                     <div class="col-lg-7">
                         <div v-if="searchTopResults.length > 0" class="card">
-                            <div class="card-header" style="display:flex;gap:1rem;align-items:center;">
-                                <span
-                                    @click="searchViewMode = 'top'"
-                                    :style="{cursor:'pointer',color:searchViewMode==='top'?'var(--primary)':'var(--text-secondary)'}">
-                                    最能逆转({{ searchTopResults.length }})
-                                </span>
-                                <span style="color:var(--border)">|</span>
-                                <span
-                                    @click="searchViewMode = 'bottom'"
-                                    :style="{cursor:'pointer',color:searchViewMode==='bottom'?'var(--primary)':'var(--text-secondary)'}">
-                                    最相似({{ searchBottomResults.length }})
-                                </span>
+                            <div class="card-header" style="display:flex;gap:1rem;align-items:center;justify-content:space-between;">
+                                <div style="display:flex;gap:1rem;align-items:center;">
+                                    <span
+                                        @click="searchViewMode = 'top'"
+                                        :style="{cursor:'pointer',color:searchViewMode==='top'?'var(--primary)':'var(--text-secondary)'}">
+                                        Top({{ searchTopResults.length }})
+                                    </span>
+                                    <span style="color:var(--border)">|</span>
+                                    <span
+                                        @click="searchViewMode = 'bottom'"
+                                        :style="{cursor:'pointer',color:searchViewMode==='bottom'?'var(--primary)':'var(--text-secondary)'}">
+                                        Bottom({{ searchBottomResults.length }})
+                                    </span>
+                                </div>
+                                <button @click="exportResults" :disabled="isExporting" class="btn btn-outline" style="padding:0.25rem 0.75rem;font-size:0.75rem;">
+                                    <span v-if="isExporting" class="spinner" style="width:12px;height:12px;margin-right:0.25rem;"></span>
+                                    {{ isExporting ? '导出中…' : '导出CSV' }}
+                                </button>
                             </div>
                             <div class="table-responsive">
                                 <table class="table">
@@ -474,8 +536,15 @@
             el: '#app',
             data: {
                 activeTab: 'search',
+                // CSV 解析表单
+                csvForm: { file: null, pvalueThreshold: 0.05, topN: 50 },
+                isParsingCsv: false,
+                csvError: '',
+                csvWarning: '',
+                // 搜索表单
                 searchForm: { upGenes: '', downGenes: '', topK: 50 },
                 isSearching: false,
+                isExporting: false,
                 searchError: '',
                 searchTopResults: [],
                 searchBottomResults: [],
@@ -496,6 +565,66 @@
                 }
             },
             methods: {
+                // CSV 文件处理
+                handleCsvFileSelect(event) {
+                    const file = event.target.files[0];
+                    if (file && file.name.endsWith('.csv')) {
+                        this.csvForm.file = file;
+                        this.csvError = '';
+                    } else {
+                        this.csvForm.file = null;
+                        this.csvError = '请选择 CSV 文件';
+                    }
+                },
+
+                async parseCsvFile() {
+                    if (!this.csvForm.file) {
+                        this.csvError = '请选择 CSV 文件';
+                        return;
+                    }
+
+                    this.isParsingCsv = true;
+                    this.csvError = '';
+                    this.csvWarning = '';
+
+                    const formData = new FormData();
+                    formData.append('file', this.csvForm.file);
+                    formData.append('pvalue_threshold', this.csvForm.pvalueThreshold);
+                    formData.append('top_n', this.csvForm.topN);
+
+                    try {
+                        const res = await fetch('http://localhost:8000/api/v1/parse_csv', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!res.ok) {
+                            const error = await res.json();
+                            throw new Error(error.detail || '解析失败');
+                        }
+
+                        const data = await res.json();
+
+                        // 填入搜索框
+                        this.searchForm.upGenes = data.up_genes.join(', ');
+                        this.searchForm.downGenes = data.down_genes.join(', ');
+
+                        // 显示警告
+                        if (data.warning) {
+                            this.csvWarning = data.warning;
+                        }
+
+                        // 清空文件选择
+                        this.$refs.csvFileInput.value = '';
+                        this.csvForm.file = null;
+
+                    } catch (e) {
+                        this.csvError = e.message || '请求失败';
+                    } finally {
+                        this.isParsingCsv = false;
+                    }
+                },
+
                 countValidGenes(text) {
                     if (!text.trim()) return 0;
                     return text.split(/[\n,]+/)
@@ -579,6 +708,47 @@
                 getVectorPreview() {
                     if (!this.extractResult?.vector) return '';
                     return this.extractResult.vector.slice(0, 10).map(v => v.toFixed(4)).join(', ');
+                },
+
+                async exportResults() {
+                    const up = this.parseGenes(this.searchForm.upGenes);
+                    const down = this.parseGenes(this.searchForm.downGenes);
+
+                    if (up.length === 0 || down.length === 0) {
+                        alert('请先进行搜索');
+                        return;
+                    }
+
+                    this.isExporting = true;
+
+                    try {
+                        const res = await fetch('http://localhost:8000/api/v1/export', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ up_genes: up, down_genes: down, top_k: this.searchForm.topK })
+                        });
+
+                        if (!res.ok) {
+                            const error = await res.json();
+                            throw new Error(error.detail || '导出失败');
+                        }
+
+                        // 下载 zip 文件
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'cmap_search_results.zip';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+
+                    } catch (e) {
+                        alert('导出失败: ' + (e.message || '请求失败'));
+                    } finally {
+                        this.isExporting = false;
+                    }
                 },
 
                 downloadVector() {

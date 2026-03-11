@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.extract import router as extract_router
 from .api.search import router as search_router
+from .api.csv_parser import router as csv_parser_router
+from .api.export import router as export_router
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -29,6 +31,8 @@ app.add_middleware(
 # 注册路由
 app.include_router(extract_router, prefix="/api/v1", tags=["特征提取"])
 app.include_router(search_router, prefix="/api/v1", tags=["疾病逆转匹配"])
+app.include_router(csv_parser_router, prefix="/api/v1", tags=["CSV解析"])
+app.include_router(export_router, prefix="/api/v1", tags=["结果导出"])
 
 
 @app.get("/")
