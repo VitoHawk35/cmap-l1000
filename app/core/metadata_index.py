@@ -23,6 +23,7 @@ class SigMetadata:
     pert_idose: str  # 剂量
     pert_time: str   # 处理时间
     sig_id_idx: int  # 在矩阵中的列索引
+    pert_type: str   # 扰动类型 (trt_cp, trt_sh, trt_oe, trt_xpr 等)
 
 
 class MetadataIndex:
@@ -57,7 +58,7 @@ class MetadataIndex:
         df = pd.read_csv(SIG_INFO_PATH, sep='\t', compression='gzip', low_memory=False)
 
         # 确保必要的列存在
-        required_cols = ['sig_id', 'pert_iname', 'cell_id', 'pert_idose']
+        required_cols = ['sig_id', 'pert_iname', 'cell_id', 'pert_idose', 'pert_type']
         for col in required_cols:
             if col not in df.columns:
                 raise ValueError(f"sig_info 缺少必要列: {col}")
@@ -143,7 +144,8 @@ class MetadataIndex:
                     cell_id=row['cell_id'],
                     pert_idose=row.get('pert_idose', ''),
                     pert_time=row.get('pert_time', ''),
-                    sig_id_idx=sig_idx
+                    sig_id_idx=sig_idx,
+                    pert_type=row.get('pert_type', '')
                 ))
 
         return results
@@ -179,7 +181,8 @@ class MetadataIndex:
                 cell_id=row['cell_id'],
                 pert_idose=row.get('pert_idose', ''),
                 pert_time=row.get('pert_time', ''),
-                sig_id_idx=idx
+                sig_id_idx=idx,
+                pert_type=row.get('pert_type', '')
             ))
 
         return results
@@ -199,5 +202,6 @@ class MetadataIndex:
             cell_id=row['cell_id'],
             pert_idose=row.get('pert_idose', ''),
             pert_time=row.get('pert_time', ''),
-            sig_id_idx=sig_idx if sig_idx is not None else -1
+            sig_id_idx=sig_idx if sig_idx is not None else -1,
+            pert_type=row.get('pert_type', '')
         )

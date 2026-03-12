@@ -121,6 +121,14 @@ async def parse_csv(
         content = await file.read()
         df = pd.read_csv(io.StringIO(content.decode('utf-8')), header=0)
 
+        # 如果存在 group1 列，只取第一个组的对比数据（避免重复）
+        if 'group1' in df.columns:
+            groups = df['group1'].unique()
+            if len(groups) > 1:
+                selected_group = groups[0]  # 取第一个组
+                df = df[df['group1'] == selected_group].copy()
+                print(f"[CSV Parser] 多组数据检测到，仅使用 group1={selected_group} 的数据")
+
         # 提取所需列（优先按列名匹配，失败则使用默认列索引）
         df = _extract_columns(df)
 
@@ -173,15 +181,31 @@ async def parse_csv(
                 detail="无法识别任何有效的基因ID，请检查基因名称是否正确"
             )
 
+        # 构建结果
         result = {
             "up_genes": up_genes,
             "down_genes": down_genes,
         }
 
+        # 检查上调和下调基因是否有重叠
+        overlap = set(up_genes) & set(down_genes)
+        if overlap:
+            # 从两个列表中都移除重叠的基因
+            result["up_genes"] = [g for g in up_genes if g not in overlap]
+            result["down_genes"] = [g for g in down_genes if g not in overlap]
+            overlap_warning = f"上调和下调基因存在 {len(overlap)} 个重叠项，已自动移除"
+            if 'warning' in result:
+                result['warning'] += f"；{overlap_warning}"
+            else:
+                result['warning'] = overlap_warning
+
         # 如果有未映射的基因，添加警告信息
         if missing_symbols:
             unique_missing = list(set(missing_symbols))[:10]  # 最多显示10个
-            result["warning"] = f"以下基因无法映射（可能输入有误）：{', '.join(unique_missing)}"
+            if 'warning' in result:
+                result['warning'] += f"；以下基因无法映射：{', '.join(unique_missing)}"
+            else:
+                result['warning'] = f"以下基因无法映射（可能输入有误）：{', '.join(unique_missing)}"
 
         return result
 

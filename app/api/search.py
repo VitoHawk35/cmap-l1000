@@ -112,7 +112,8 @@ async def search_reversals(request: SearchRequest):
             drug=sig.pert_iname,
             cell_line=sig.cell_id,
             dose=sig.pert_idose,
-            score=float(score)
+            score=float(score),
+            pert_type=sig.pert_type
         ))
 
     # 5. 组装 Bottom 结果（最相似）
@@ -124,7 +125,8 @@ async def search_reversals(request: SearchRequest):
             drug=sig.pert_iname,
             cell_line=sig.cell_id,
             dose=sig.pert_idose,
-            score=float(score)
+            score=float(score),
+            pert_type=sig.pert_type
         ))
 
     return SearchResponse(

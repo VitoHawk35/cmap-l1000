@@ -43,6 +43,7 @@ class SearchResult(BaseModel):
     cell_line: str               # 细胞系
     dose: str                    # 剂量
     score: float                 # 余弦相似度分数
+    pert_type: str = ""          # 扰动类型
 
 
 class SearchResponse(BaseModel):

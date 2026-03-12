@@ -358,6 +358,17 @@
                                 </div>
 
                                 <div class="mb-3">
+                                    <label class="form-label">搜索算法</label>
+                                    <select v-model="searchForm.algorithm" class="form-control">
+                                        <option value="cosine">余弦相似度 (Cosine)</option>
+                                        <option value="wtcs">WTCS (CMAP官方)</option>
+                                    </select>
+                                    <div class="count-text" style="font-size:0.7rem;color:var(--text-secondary);">
+                                        {{ searchForm.algorithm === 'wtcs' ? '基于KS统计量的富集得分' : '基于向量夹角的相似度' }}
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
                                     <label class="form-label">结果数量</label>
                                     <select v-model="searchForm.topK" class="form-control">
                                         <option :value="50">Top 50 + Bottom 50</option>
@@ -372,6 +383,17 @@
                                     <span v-if="isSearching" class="spinner"></span>
                                     {{ isSearching ? '搜索中…' : '搜索' }}
                                 </button>
+
+                                <!-- 进度条 -->
+                                <div v-if="searchProgress.show" class="mt-3">
+                                    <div class="progress" style="height: 8px; background: var(--input); border-radius: 4px; overflow: hidden;">
+                                        <div class="progress-bar" :style="{width: searchProgress.percent + '%', background: 'var(--primary)', height: '100%', transition: 'width 0.3s ease'}"></div>
+                                    </div>
+                                    <div class="count-text mt-1" style="display: flex; justify-content: space-between;">
+                                        <span>处理中: {{ searchProgress.current.toLocaleString() }} / {{ searchProgress.total.toLocaleString() }}</span>
+                                        <span>{{ searchProgress.percent }}%</span>
+                                    </div>
+                                </div>
 
                                 <div v-if="searchError" class="alert-error">
                                     输入错误：{{ searchError }}
@@ -411,6 +433,7 @@
                                         <tr>
                                             <th width="50">排名</th>
                                             <th>药物名</th>
+                                            <th>扰动类型</th>
                                             <th>得分</th>
                                             <th>ID</th>
                                         </tr>
@@ -423,6 +446,11 @@
                                                 </div>
                                             </td>
                                             <td>{{ result.drug }}</td>
+                                            <td>
+                                                <span style="font-size:0.75rem;color:var(--text-secondary);">
+                                                    {{ result.pert_type || '-' }}
+                                                </span>
+                                            </td>
                                             <td>
                                                 <span class="score-text" :class="result.score < 0 ? 'score-neg' : 'score-pos'">
                                                     {{ result.score < 0 ? '↓' : '↑' }} {{ result.score.toFixed(4) }}
@@ -542,7 +570,7 @@
                 csvError: '',
                 csvWarning: '',
                 // 搜索表单
-                searchForm: { upGenes: '', downGenes: '', topK: 50 },
+                searchForm: { upGenes: '', downGenes: '', topK: 50, algorithm: 'cosine' },
                 isSearching: false,
                 isExporting: false,
                 searchError: '',
@@ -550,6 +578,8 @@
                 searchBottomResults: [],
                 searchViewMode: 'top',
                 searchStats: { upCount: 0, downCount: 0 },
+                // 进度条
+                searchProgress: { show: false, percent: 0, current: 0, total: 0, batch: 0, totalBatches: 0 },
                 extractForm: { drug: '', cellLine: '', dose: '' },
                 isExtracting: false,
                 extractError: '',
@@ -609,10 +639,11 @@
                         this.searchForm.upGenes = data.up_genes.join(', ');
                         this.searchForm.downGenes = data.down_genes.join(', ');
 
-                        // 显示警告
+                        /* 注释掉：显示警告
                         if (data.warning) {
                             this.csvWarning = data.warning;
                         }
+                        */
 
                         // 清空文件选择
                         this.$refs.csvFileInput.value = '';
@@ -656,6 +687,13 @@
                     this.searchBottomResults = [];
                     this.searchViewMode = 'top';
 
+                    // WTCS 算法使用 SSE 流式接口
+                    if (this.searchForm.algorithm === 'wtcs') {
+                        await this.performSearchWTCS(up, down);
+                        return;
+                    }
+
+                    // 余弦相似度使用普通接口
                     try {
                         const res = await fetch('http://localhost:8000/api/v1/search', {
                             method: 'POST',
@@ -671,6 +709,101 @@
                         this.searchError = e.message || '请求失败';
                     } finally {
                         this.isSearching = false;
+                    }
+                },
+
+                async performSearchWTCS(up, down) {
+                    // 显示进度条
+                    this.searchProgress = { show: true, percent: 0, current: 0, total: 473647, batch: 0, totalBatches: 95 };
+
+                    return new Promise((resolve, reject) => {
+                        const payload = JSON.stringify({ up_genes: up, down_genes: down, top_k: this.searchForm.topK });
+
+                        fetch('http://localhost:8000/api/v1/search_wtcs_stream', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: payload
+                        }).then(response => {
+                            if (!response.ok) {
+                                throw new Error('搜索失败');
+                            }
+
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buffer = '';
+
+                            const readChunk = () => {
+                                reader.read().then(({ done, value }) => {
+                                    if (done) {
+                                        this.isSearching = false;
+                                        this.searchProgress.show = false;
+                                        resolve();
+                                        return;
+                                    }
+
+                                    buffer += decoder.decode(value, { stream: true });
+                                    // SSE 事件以 \n\n 或 \r\n\r\n 分隔（兼容 Windows）
+                                    const events = buffer.split(/\n\n|\r\n\r\n/);
+                                    buffer = events.pop(); // 保留最后一个不完整的块
+
+                                    events.forEach(event => {
+                                        const lines = event.split('\n');
+                                        lines.forEach(line => {
+                                            line = line.trim();
+                                            if (line.startsWith('data:')) {
+                                                const jsonStr = line.slice(5).trim();
+                                                try {
+                                                    const data = JSON.parse(jsonStr);
+                                                    this.handleWTCSStreamEvent(data);
+                                                } catch (e) {
+                                                    console.error('Parse error:', e, jsonStr);
+                                                }
+                                            }
+                                        });
+                                    });
+
+                                    readChunk();
+                                }).catch(err => {
+                                    this.isSearching = false;
+                                    this.searchProgress.show = false;
+                                    this.searchError = err.message || '流式请求失败';
+                                    reject(err);
+                                });
+                            };
+
+                            readChunk();
+                        }).catch(err => {
+                            this.isSearching = false;
+                            this.searchProgress.show = false;
+                            this.searchError = err.message || '请求失败';
+                            reject(err);
+                        });
+                    });
+                },
+
+                handleWTCSStreamEvent(event) {
+                    switch (event.type) {
+                        case 'progress':
+                            this.searchProgress = {
+                                show: true,
+                                percent: event.percent,
+                                current: event.current,
+                                total: event.total,
+                                batch: event.batch,
+                                totalBatches: event.total_batches
+                            };
+                            break;
+                        case 'result':
+                            const data = event.data;
+                            this.searchTopResults = data.top_results;
+                            this.searchBottomResults = data.bottom_results;
+                            this.searchStats = { upCount: data.query_up_count, downCount: data.query_down_count };
+                            this.searchProgress.show = false;
+                            break;
+                        case 'error':
+                            this.searchError = event.message;
+                            this.searchProgress.show = false;
+                            break;
                     }
                 },
 
@@ -711,44 +844,90 @@
                 },
 
                 async exportResults() {
-                    const up = this.parseGenes(this.searchForm.upGenes);
-                    const down = this.parseGenes(this.searchForm.downGenes);
-
-                    if (up.length === 0 || down.length === 0) {
-                        alert('请先进行搜索');
+                    // 检查是否有搜索结果
+                    if (!this.searchTopResults?.length || !this.searchBottomResults?.length) {
+                        alert('请先进行搜索，有结果后才能导出');
                         return;
                     }
 
-                    this.isExporting = true;
-
                     try {
-                        const res = await fetch('http://localhost:8000/api/v1/export', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ up_genes: up, down_genes: down, top_k: this.searchForm.topK })
-                        });
+                        // 根据算法选择文件名
+                        const isWtcs = this.searchForm.algorithm === 'wtcs';
+                        const scoreLabel = isWtcs ? 'wtcs_score' : 'cosine_score';
 
-                        if (!res.ok) {
-                            const error = await res.json();
-                            throw new Error(error.detail || '导出失败');
-                        }
+                        // 生成 Top CSV
+                        const topCsv = this._generateCSV(this.searchTopResults, scoreLabel);
+                        // 生成 Bottom CSV
+                        const bottomCsv = this._generateCSV(this.searchBottomResults, scoreLabel);
 
-                        // 下载 zip 文件
-                        const blob = await res.blob();
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'cmap_search_results.zip';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
+                        // 打包为 zip 并下载
+                        await this._downloadZip(topCsv, bottomCsv, isWtcs);
 
                     } catch (e) {
-                        alert('导出失败: ' + (e.message || '请求失败'));
-                    } finally {
-                        this.isExporting = false;
+                        alert('导出失败: ' + (e.message || '未知错误'));
                     }
+                },
+
+                // 生成 CSV 字符串
+                _generateCSV(results, scoreLabel) {
+                    const headers = ['rank', 'sig_id', 'drug', 'cell_line', 'dose', 'pert_type', scoreLabel];
+                    const rows = results.map(r => [
+                        r.rank,
+                        r.sig_id,
+                        this._escapeCsvField(r.drug),
+                        r.cell_line,
+                        r.dose,
+                        r.pert_type || '',
+                        r.score.toFixed(6)
+                    ]);
+                    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+                },
+
+                // 转义 CSV 字段（处理逗号、引号、换行）
+                _escapeCsvField(field) {
+                    if (field === null || field === undefined) return '';
+                    const str = String(field);
+                    // 如果包含逗号、引号或换行，需要用引号包裹并转义内部引号
+                    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                        return '"' + str.replace(/"/g, '""') + '"';
+                    }
+                    return str;
+                },
+
+                // 下载 zip 文件
+                async _downloadZip(topCsv, bottomCsv, isWtcs) {
+                    const JSZip = await this._loadJSZip();
+                    const zip = new JSZip();
+
+                    const topFilename = isWtcs ? 'top_reversals_wtcs.csv' : 'top_reversals.csv';
+                    const bottomFilename = isWtcs ? 'bottom_matches_wtcs.csv' : 'bottom_matches.csv';
+
+                    zip.file(topFilename, topCsv);
+                    zip.file(bottomFilename, bottomCsv);
+
+                    const blob = await zip.generateAsync({ type: 'blob' });
+                    const url = URL.createObjectURL(blob);
+
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = isWtcs ? 'cmap_wtcs_results.zip' : 'cmap_search_results.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                },
+
+                // 动态加载 JSZip 库
+                async _loadJSZip() {
+                    if (window.JSZip) return window.JSZip;
+
+                    return new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                        script.onload = () => resolve(window.JSZip);
+                        script.onerror = () => reject(new Error('无法加载 JSZip 库'));
+                        document.head.appendChild(script);
+                    });
                 },
 
                 downloadVector() {
