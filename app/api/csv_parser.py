@@ -19,6 +19,9 @@ router = APIRouter()
 # 全局缓存：Gene Symbol -> Entrez ID
 _symbol_to_entrez: Dict[str, int] = {}
 
+# 全局缓存：Entrez ID -> Gene Symbol (反向映射)
+_entrez_to_symbol: Dict[int, str] = {}
+
 # 可能的列名变体（小写用于匹配）
 _COLUMN_NAME_VARIANTS = {
     'gene': ['gene', 'genes', 'gene_symbol', 'gene symbol', 'symbol', 'symbols',
@@ -73,21 +76,22 @@ def _extract_columns(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def _load_gene_mapping() -> Dict[str, int]:
-    """加载基因名映射（Symbol -> Entrez ID）"""
-    global _symbol_to_entrez
-    if _symbol_to_entrez:
-        return _symbol_to_entrez
+def _load_gene_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
+    """加载基因名映射（Symbol -> Entrez ID，以及反向映射）"""
+    global _symbol_to_entrez, _entrez_to_symbol
+    if _symbol_to_entrez and _entrez_to_symbol:
+        return _symbol_to_entrez, _entrez_to_symbol
 
     df = pd.read_csv(GENE_INFO_PATH, sep='\t', compression='gzip')
 
-    # 建立映射：pr_gene_symbol -> pr_gene_id
+    # 建立双向映射
     for _, row in df.iterrows():
         symbol = str(row['pr_gene_symbol']).upper().strip()
         entrez_id = int(row['pr_gene_id'])
         _symbol_to_entrez[symbol] = entrez_id
+        _entrez_to_symbol[entrez_id] = symbol  # 反向映射
 
-    return _symbol_to_entrez
+    return _symbol_to_entrez, _entrez_to_symbol
 
 
 @router.post("/parse_csv")
@@ -97,29 +101,48 @@ async def parse_csv(
     top_n: int = Form(50)
 ) -> Dict[str, Any]:
     """
-    解析差异基因 CSV 文件，提取上下调基因并映射为 Entrez ID
+    解析差异基因 CSV/XLSX 文件，提取上下调基因并映射为 Entrez ID
 
     Args:
-        file: CSV 文件（第1列基因名，第2列logFC，第4列PValue）
+        file: CSV 或 XLSX 文件（需包含 gene/logFC/PValue 列）
         pvalue_threshold: P值阈值（默认0.05）
         top_n: 取前N个上调和前N个下调
 
     Returns:
-        {"up_genes": [...], "down_genes": [...], "warning": "..." (可选)}
+        {
+            "up_genes": [...], "down_genes": [...],
+            "up_symbols": [...], "down_symbols": [...],
+            "missing_up": [...], "missing_down": [...],
+            "warning": "..." (可选)
+        }
     """
-    # 检查文件类型
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="请上传 CSV 文件")
+    filename = file.filename.lower()
+    is_xlsx = filename.endswith('.xlsx') or filename.endswith('.xls')
+    is_csv = filename.endswith('.csv')
+
+    if not (is_csv or is_xlsx):
+        raise HTTPException(status_code=400, detail="请上传 CSV 或 XLSX 文件")
 
     # 读取基因映射
-    symbol_to_entrez = _load_gene_mapping()
+    symbol_to_entrez, entrez_to_symbol = _load_gene_mapping()
     if not symbol_to_entrez:
         raise HTTPException(status_code=500, detail="基因映射字典加载失败")
 
     try:
-        # 读取 CSV 文件
+        # 读取文件内容
         content = await file.read()
-        df = pd.read_csv(io.StringIO(content.decode('utf-8')), header=0)
+
+        if is_csv:
+            df = pd.read_csv(io.StringIO(content.decode('utf-8')), header=0)
+        else:
+            # XLSX 格式
+            try:
+                df = pd.read_excel(io.BytesIO(content), engine='openpyxl')
+            except ImportError:
+                raise HTTPException(
+                    status_code=500,
+                    detail="服务器缺少 openpyxl 依赖，无法解析 XLSX 文件，请联系管理员安装：pip install openpyxl"
+                )
 
         # 如果存在 group1 列，只取第一个组的对比数据（避免重复）
         if 'group1' in df.columns:
@@ -150,42 +173,66 @@ async def parse_csv(
         # 按 logFC 降序排序
         df = df.sort_values('logFC', ascending=False).reset_index(drop=True)
 
-        # 提取 Top N 上调（logFC最大）和 Top N 下调（logFC最小）
-        up_df = df.head(top_n)
-        down_df = df.tail(top_n)
+        # 提取上调基因：logFC > 0 的 Top N（logFC最大）
+        up_candidates = df[df['logFC'] > 0]
+        up_df = up_candidates.head(top_n)
 
-        # 映射为 Entrez ID
+        # 提取下调基因：logFC < 0 的 Top N（logFC最小，即最负）
+        down_candidates = df[df['logFC'] < 0]
+        down_df = down_candidates.tail(top_n)
+
+        # 记录被过滤掉的零值基因（用于前端提示）
+        zero_count = len(df[df['logFC'] == 0])
+
+        # 映射为 Entrez ID，同时记录无法映射的基因
         up_genes: List[int] = []
         down_genes: List[int] = []
-        missing_symbols: List[str] = []
+        missing_up: List[str] = []
+        missing_down: List[str] = []
 
         for symbol in up_df['gene_symbol']:
             if symbol in symbol_to_entrez:
                 up_genes.append(symbol_to_entrez[symbol])
             else:
-                missing_symbols.append(symbol)
+                missing_up.append(symbol)
 
         for symbol in down_df['gene_symbol']:
             if symbol in symbol_to_entrez:
                 down_genes.append(symbol_to_entrez[symbol])
             else:
-                missing_symbols.append(symbol)
+                missing_down.append(symbol)
 
         # 去重并保持顺序
         up_genes = list(dict.fromkeys(up_genes))
         down_genes = list(dict.fromkeys(down_genes))
+        missing_up = list(dict.fromkeys(missing_up))
+        missing_down = list(dict.fromkeys(missing_down))
 
-        if not up_genes and not down_genes:
+        # 获取对应的 Gene Symbol 用于显示（保持相同顺序）
+        up_symbols = [entrez_to_symbol.get(gid, str(gid)) for gid in up_genes]
+        down_symbols = [entrez_to_symbol.get(gid, str(gid)) for gid in down_genes]
+
+        if not up_genes:
             raise HTTPException(
                 status_code=400,
-                detail="无法识别任何有效的基因ID，请检查基因名称是否正确"
+                detail="无法提取上调基因（logFC > 0），请检查数据或降低PValue阈值"
             )
 
         # 构建结果
         result = {
             "up_genes": up_genes,
             "down_genes": down_genes,
+            "up_symbols": up_symbols,
+            "down_symbols": down_symbols,
+            "missing_up": missing_up,
+            "missing_down": missing_down,
         }
+
+        # 下调为空时添加提示
+        if not down_genes:
+            result["warning"] = "未提取到下调基因（logFC < 0），仅使用上调基因进行搜索"
+        elif zero_count > 0:
+            result["warning"] = f"有 {zero_count} 个基因 logFC = 0，已排除"
 
         # 检查上调和下调基因是否有重叠
         overlap = set(up_genes) & set(down_genes)
@@ -200,8 +247,9 @@ async def parse_csv(
                 result['warning'] = overlap_warning
 
         # 如果有未映射的基因，添加警告信息
-        if missing_symbols:
-            unique_missing = list(set(missing_symbols))[:10]  # 最多显示10个
+        all_missing = missing_up + missing_down
+        if all_missing:
+            unique_missing = list(set(all_missing))[:10]  # 最多显示10个
             if 'warning' in result:
                 result['warning'] += f"；以下基因无法映射：{', '.join(unique_missing)}"
             else:
@@ -210,12 +258,64 @@ async def parse_csv(
         return result
 
     except pd.errors.EmptyDataError:
-        raise HTTPException(status_code=400, detail="CSV 文件为空")
+        raise HTTPException(status_code=400, detail="文件为空")
     except pd.errors.ParserError as e:
-        raise HTTPException(status_code=400, detail=f"CSV 解析错误：{str(e)}")
+        raise HTTPException(status_code=400, detail=f"文件解析错误：{str(e)}")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"处理失败：{str(e)}")
+
+
+@router.post("/convert_to_ids")
+async def convert_to_ids(symbols: List[str]) -> Dict[str, Any]:
+    """
+    将 Gene Symbol 列表转换为 Entrez ID 列表
+
+    用于手动输入场景下将基因名转换为计算用的 ID
+    """
+    symbol_to_entrez, _ = _load_gene_mapping()
+
+    ids = []
+    missing = []
+
+    for symbol in symbols:
+        symbol_clean = symbol.strip().upper()
+        gid = symbol_to_entrez.get(symbol_clean)
+        if gid:
+            ids.append(gid)
+        else:
+            missing.append(symbol)
+
+    return {
+        "ids": ids,
+        "missing": missing,
+        "total": len(symbols),
+        "mapped": len(ids)
+    }
+    """
+    将 Entrez ID 列表转换为 Gene Symbol 列表
+
+    用于手动输入场景下显示基因名称
+    """
+    _, entrez_to_symbol = _load_gene_mapping()
+
+    symbols = []
+    missing = []
+
+    for gid in gene_ids:
+        symbol = entrez_to_symbol.get(gid)
+        if symbol:
+            symbols.append(symbol)
+        else:
+            symbols.append(str(gid))  # 找不到时显示数字
+            missing.append(str(gid))
+
+    return {
+        "symbols": symbols,
+        "missing": missing,
+        "total": len(gene_ids),
+        "mapped": len(gene_ids) - len(missing)
+    }

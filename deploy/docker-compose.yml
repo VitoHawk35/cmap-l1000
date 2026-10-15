@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  cmap-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: cmap-api
+    restart: always
+    ports:
+      - "127.0.0.1:8001:8000"  # 映射到8001避免冲突
+    volumes:
+      # 挂载数据目录（需要提前准备）
+      - /home/keji/cmap/cmap_data:/app/cmap_data:ro
+      - /home/keji/cmap/touchstone_data:/app/touchstone_data:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - API_PORT=8000
+    networks:
+      - cmap-network
+    # 内存限制（根据服务器调整）
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # 可选：nginx反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: cmap-nginx
+    restart: always
+    ports:
+      - "10.71.219.177:80:80"    # 绑定到内网IP
+      # - "443:443"  # 如需HTTPS可取消注释
+    networks:
+      - cmap-network
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - cmap-api
+
+networks:
+  cmap-network:
+    driver: bridge

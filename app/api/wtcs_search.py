@@ -73,6 +73,10 @@ async def search_reversals_wtcs(request: SearchRequest):
     matrix_store = get_matrix_store()
     gene_to_idx = get_gene_to_idx()
 
+    # 防御：top_k 不能超过总数的一半，避免前后结果重叠
+    max_top_k = N_SIGS // 2
+    top_k = min(request.top_k, max_top_k)
+
     # 1. 将 Entrez ID 转换为矩阵行索引
     up_indices = []
     down_indices = []
@@ -87,8 +91,8 @@ async def search_reversals_wtcs(request: SearchRequest):
         if gene_id_str in gene_to_idx:
             down_indices.append(gene_to_idx[gene_id_str])
 
-    # 检查有效基因数量
-    if len(up_indices) == 0 or len(down_indices) == 0:
+    # 检查有效基因数量（上调必须非空，下调允许为空）
+    if len(up_indices) == 0:
         raise HTTPException(
             status_code=400,
             detail=f"有效基因数量不足（上调:{len(up_indices)}, 下调:{len(down_indices)}），请检查基因ID"
@@ -110,7 +114,7 @@ async def search_reversals_wtcs(request: SearchRequest):
     top_indices, top_scores, bottom_indices, bottom_scores = scorer.top_k_both(
         query_vector,
         batch_iterator,
-        k=request.top_k
+        k=top_k
     )
 
     # 4. 获取元数据
@@ -162,6 +166,10 @@ async def search_reversals_wtcs_stream(request: SearchRequest):
     - result: {"type": "result", "data": {...}}
     - error: {"type": "error", "message": "..."}
     """
+    # 防御：top_k 不能超过总数的一半，避免前后结果重叠
+    max_top_k = N_SIGS // 2
+    top_k = min(request.top_k, max_top_k)
+
     async def event_generator():
         try:
             metadata_index = get_metadata_index()
@@ -183,7 +191,7 @@ async def search_reversals_wtcs_stream(request: SearchRequest):
                     down_indices.append(gene_to_idx[gene_id_str])
 
             # 检查有效基因数量
-            if len(up_indices) == 0 or len(down_indices) == 0:
+            if len(up_indices) == 0:
                 yield f"data: {json.dumps({'type': 'error', 'message': f'有效基因数量不足（上调:{len(up_indices)}, 下调:{len(down_indices)}）'})}\n\n"
                 return
 
@@ -220,13 +228,13 @@ async def search_reversals_wtcs_stream(request: SearchRequest):
                     idx = start_idx + i
 
                     # Top 堆（最负的）
-                    if len(top_heap) < request.top_k:
+                    if len(top_heap) < top_k:
                         heapq.heappush(top_heap, (-score, idx))
                     elif score < -top_heap[0][0]:
                         heapq.heapreplace(top_heap, (-score, idx))
 
                     # Bottom 堆（最正的）
-                    if len(bottom_heap) < request.top_k:
+                    if len(bottom_heap) < top_k:
                         heapq.heappush(bottom_heap, (score, idx))
                     elif score > bottom_heap[0][0]:
                         heapq.heapreplace(bottom_heap, (score, idx))

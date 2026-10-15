@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CMAP L1000</title>
+    <title>基于CMAP的药物发现智能体</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
@@ -253,7 +253,7 @@
     <div id="app">
         <header class="header">
             <div class="container">
-                <div class="logo">CMAP L1000</div>
+                <div class="logo">基于CMAP的药物发现智能体</div>
             </div>
         </header>
 
@@ -280,17 +280,28 @@
                             <div class="card-header">CSV 差异基因文件解析</div>
                             <div class="card-body p-3">
                                 <p class="guide-text">
-                                    上传生信软件输出的 CSV 文件，自动提取上下调基因
+                                    上传生信软件输出的差异基因文件（支持 CSV 或 XLSX），自动提取上下调基因
                                 </p>
 
                                 <div class="mb-3">
-                                    <label class="form-label">选择 CSV 文件</label>
+                                    <label class="form-label">选择疾病的基因表达文件</label>
                                     <input
                                         type="file"
                                         ref="csvFileInput"
                                         @change="handleCsvFileSelect"
-                                        accept=".csv"
+                                        accept=".csv,.xlsx,.xls"
                                         class="form-control">
+                                </div>
+
+                                <div class="mb-3" style="background:rgba(8,145,178,0.05);border-radius:6px;padding:0.75rem;">
+                                    <div style="color:var(--text-secondary);font-size:0.75rem;margin-bottom:0.25rem;">
+                                        <strong style="color:var(--primary);">文件必须包含以下列名（至少三列）：</strong>
+                                    </div>
+                                    <div style="color:var(--text-secondary);font-size:0.7rem;line-height:1.6;">
+                                        <span class="gene-tag">gene / Gene_Symbol</span>
+                                        <span class="gene-tag">logFC / log2FoldChange</span>
+                                        <span class="gene-tag">pvalue / PValue / padj</span>
+                                    </div>
                                 </div>
 
                                 <div class="row mb-3">
@@ -327,6 +338,25 @@
                                 <div v-if="csvWarning" style="color:var(--warning);font-size:0.75rem;margin-top:0.5rem;">
                                     {{ csvWarning }}
                                 </div>
+
+                                <!-- 无效基因展示 -->
+                                <div v-if="csvMissingUp.length > 0 || csvMissingDown.length > 0" class="mt-3" style="border:1px solid var(--border);border-radius:6px;padding:0.75rem;background:rgba(245,158,11,0.05);">
+                                    <div style="color:var(--warning);font-size:0.75rem;font-weight:600;margin-bottom:0.5rem;">
+                                        ⚠ 以下基因无法识别（共 {{ csvMissingUp.length + csvMissingDown.length }} 个）
+                                    </div>
+                                    <div v-if="csvMissingUp.length > 0" style="margin-bottom:0.5rem;">
+                                        <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.25rem;">上调基因中未识别（{{ csvMissingUp.length }}个）：</div>
+                                        <div style="display:flex;flex-wrap:wrap;gap:0.25rem;">
+                                            <span v-for="g in csvMissingUp" :key="g" class="gene-tag" style="background:rgba(239,68,68,0.15);color:#fca5a5;">{{ g }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-if="csvMissingDown.length > 0">
+                                        <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.25rem;">下调基因中未识别（{{ csvMissingDown.length }}个）：</div>
+                                        <div style="display:flex;flex-wrap:wrap;gap:0.25rem;">
+                                            <span v-for="g in csvMissingDown" :key="g" class="gene-tag" style="background:rgba(239,68,68,0.15);color:#fca5a5;">{{ g }}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -343,37 +373,41 @@
                                         v-model="searchForm.upGenes"
                                         class="form-control"
                                         rows="4"
-                                        placeholder="Entrez Gene ID，逗号/换行分隔"></textarea>
-                                    <div class="count-text">有效ID：{{ countValidGenes(searchForm.upGenes) }}个</div>
+                                        placeholder="Gene Symbol（如 BRCA1, TP53），逗号/换行分隔"></textarea>
+                                    <div class="count-text">有效基因：{{ countValidGenes(searchForm.upGenes) }}个</div>
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">下调基因（必填）</label>
+                                    <label class="form-label">下调基因（选填）</label>
                                     <textarea
                                         v-model="searchForm.downGenes"
                                         class="form-control"
                                         rows="4"
-                                        placeholder="Entrez Gene ID，逗号/换行分隔"></textarea>
-                                    <div class="count-text">有效ID：{{ countValidGenes(searchForm.downGenes) }}个</div>
+                                        placeholder="Gene Symbol（如 MYC, EGFR），逗号/换行分隔"></textarea>
+                                    <div class="count-text">有效基因：{{ countValidGenes(searchForm.downGenes) }}个</div>
                                 </div>
 
                                 <div class="mb-3">
                                     <label class="form-label">搜索算法</label>
                                     <select v-model="searchForm.algorithm" class="form-control">
                                         <option value="cosine">余弦相似度 (Cosine)</option>
-                                        <option value="wtcs">WTCS (CMAP官方)</option>
+                                        <option value="wtcs">WTCS (CMAP官方 - Instance级)</option>
+                                        <option value="tau">Tau分数 (完整后处理 - 药物级)</option>
                                     </select>
                                     <div class="count-text" style="font-size:0.7rem;color:var(--text-secondary);">
-                                        {{ searchForm.algorithm === 'wtcs' ? '基于KS统计量的富集得分' : '基于向量夹角的相似度' }}
+                                        {{ searchForm.algorithm === 'wtcs' ? '基于KS统计量的富集得分（Instance级原始分数）' : searchForm.algorithm === 'tau' ? 'NCS归一化+药物聚合+Tau百分位（推荐用于药物筛选）' : '基于向量夹角的相似度' }}
                                     </div>
                                 </div>
 
                                 <div class="mb-3">
                                     <label class="form-label">结果数量</label>
-                                    <select v-model="searchForm.topK" class="form-control">
-                                        <option :value="50">Top 50 + Bottom 50</option>
-                                        <option :value="100">Top 100 + Bottom 100</option>
-                                    </select>
+                                    <input
+                                        v-model.number="searchForm.topK"
+                                        type="number"
+                                        min="10"
+                                        max="5000"
+                                        class="form-control">
+                                    <div class="count-text">范围: 10 - 5000 (Top N + Bottom N)</div>
                                 </div>
 
                                 <button
@@ -390,7 +424,13 @@
                                         <div class="progress-bar" :style="{width: searchProgress.percent + '%', background: 'var(--primary)', height: '100%', transition: 'width 0.3s ease'}"></div>
                                     </div>
                                     <div class="count-text mt-1" style="display: flex; justify-content: space-between;">
-                                        <span>处理中: {{ searchProgress.current.toLocaleString() }} / {{ searchProgress.total.toLocaleString() }}</span>
+                                        <span>
+                                            <span v-if="searchProgress.stage === 'submitting'">正在提交任务...</span>
+                                            <span v-else-if="searchProgress.stage === 'scoring'">计算WTCS分数中: {{ searchProgress.current.toLocaleString() }} / {{ searchProgress.total.toLocaleString() }}</span>
+                                            <span v-else-if="searchProgress.stage === 'post_processing'">后处理（NCS归一化 → 药物聚合 → Tau计算）...</span>
+                                            <span v-else-if="searchProgress.stage === 'done'">计算完成</span>
+                                            <span v-else>处理中: {{ searchProgress.current.toLocaleString() }} / {{ searchProgress.total.toLocaleString() }}</span>
+                                        </span>
                                         <span>{{ searchProgress.percent }}%</span>
                                     </div>
                                 </div>
@@ -407,6 +447,29 @@
                     </div>
 
                     <div class="col-lg-7">
+                        <div v-if="searchTopResults.length > 0 || searchBottomResults.length > 0" class="card mb-3">
+                            <div class="card-header" style="display:flex;gap:1rem;align-items:center;justify-content:space-between;">
+                                <span>得分分布</span>
+                                <div style="display:flex;gap:0.5rem;align-items:center;">
+                                    <input
+                                        v-model="chartDrugQuery"
+                                        @keyup.enter="locateChartDrug"
+                                        type="text"
+                                        class="form-control"
+                                        style="padding:0.25rem 0.5rem;font-size:0.75rem;width:170px;"
+                                        placeholder="输入药物名定位">
+                                    <button @click="locateChartDrug" class="btn btn-outline" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                                        定位
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body p-2">
+                                <div id="scoreChart" style="width:100%;height:360px;"></div>
+                                <div v-if="chartLocateError" style="color:var(--danger);font-size:0.75rem;padding:0.25rem 0.5rem 0;">
+                                    {{ chartLocateError }}
+                                </div>
+                            </div>
+                        </div>
                         <div v-if="searchTopResults.length > 0" class="card">
                             <div class="card-header" style="display:flex;gap:1rem;align-items:center;justify-content:space-between;">
                                 <div style="display:flex;gap:1rem;align-items:center;">
@@ -426,6 +489,9 @@
                                     <span v-if="isExporting" class="spinner" style="width:12px;height:12px;margin-right:0.25rem;"></span>
                                     {{ isExporting ? '导出中…' : '导出CSV' }}
                                 </button>
+                                <button @click="safeExportResults" :disabled="isExporting" class="btn btn-outline" style="padding:0.25rem 0.75rem;font-size:0.75rem;margin-left:0.5rem;">
+                                    安全下载
+                                </button>
                             </div>
                             <div class="table-responsive">
                                 <table class="table">
@@ -434,7 +500,9 @@
                                             <th width="50">排名</th>
                                             <th>药物名</th>
                                             <th>扰动类型</th>
+                                            <th>Touchstone</th>
                                             <th>得分</th>
+                                            <th v-if="searchForm.algorithm === 'tau'">WTCS得分</th>
                                             <th>ID</th>
                                         </tr>
                                     </thead>
@@ -452,9 +520,19 @@
                                                 </span>
                                             </td>
                                             <td>
+                                                <span v-if="result.is_touchstone" style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;">是</span>
+                                                <span v-else style="font-size:0.7rem;color:var(--text-secondary);">-</span>
+                                            </td>
+                                            <td>
                                                 <span class="score-text" :class="result.score < 0 ? 'score-neg' : 'score-pos'">
                                                     {{ result.score < 0 ? '↓' : '↑' }} {{ result.score.toFixed(4) }}
                                                 </span>
+                                            </td>
+                                            <td v-if="searchForm.algorithm === 'tau'">
+                                                <span v-if="result.best_wtcs !== undefined && result.best_wtcs !== null" class="score-text" :class="result.best_wtcs < 0 ? 'score-neg' : 'score-pos'">
+                                                    {{ result.best_wtcs < 0 ? '↓' : '↑' }} {{ result.best_wtcs.toFixed(4) }}
+                                                </span>
+                                                <span v-else style="color:var(--text-secondary);">-</span>
                                             </td>
                                             <td>
                                                 <span style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);">
@@ -489,7 +567,7 @@
 
                                 <div class="row mb-3">
                                     <div class="col-6">
-                                        <label class="form-label">细胞系（选填）</label>
+                                        <label class="form-label">细胞系���选填）</label>
                                         <input v-model="extractForm.cellLine" type="text" class="form-control" placeholder="A375">
                                     </div>
                                     <div class="col-6">
@@ -559,18 +637,31 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <script src="echarts.min.js"></script>
     <script>
         new Vue({
             el: '#app',
             data: {
                 activeTab: 'search',
+                // API 基础地址：8001 端口访问时走同源（避免自签名证书跨端口信任问题）；
+                // 兼容旧入口（http://10.39.15.238:8081）仍指向后端绝对地址
+                apiBaseUrl: location.port === '8001' ? '' : 'https://10.39.15.238:8001',
                 // CSV 解析表单
                 csvForm: { file: null, pvalueThreshold: 0.05, topN: 50 },
                 isParsingCsv: false,
                 csvError: '',
                 csvWarning: '',
+                csvMissingUp: [],
+                csvMissingDown: [],
                 // 搜索表单
-                searchForm: { upGenes: '', downGenes: '', topK: 50, algorithm: 'cosine' },
+                searchForm: {
+                    upGenes: '',
+                    downGenes: '',
+                    topK: 50,
+                    algorithm: 'tau',
+                    upGenesRaw: null,    // CSV上传后的原始Entrez ID
+                    downGenesRaw: null   // CSV上传后的原始Entrez ID
+                },
                 isSearching: false,
                 isExporting: false,
                 searchError: '',
@@ -578,8 +669,14 @@
                 searchBottomResults: [],
                 searchViewMode: 'top',
                 searchStats: { upCount: 0, downCount: 0 },
+                // 得分分布图
+                chartDrugQuery: '',
+                chartLocateError: '',
                 // 进度条
                 searchProgress: { show: false, percent: 0, current: 0, total: 0, batch: 0, totalBatches: 0 },
+                // Tau 异步任务
+                tauJobId: null,
+                tauPollTimer: null,
                 extractForm: { drug: '', cellLine: '', dose: '' },
                 isExtracting: false,
                 extractError: '',
@@ -587,35 +684,109 @@
             },
             computed: {
                 canSearch() {
-                    return this.countValidGenes(this.searchForm.upGenes) > 0 &&
-                           this.countValidGenes(this.searchForm.downGenes) > 0;
+                    return this.countValidGenes(this.searchForm.upGenes) > 0;
                 },
                 currentSearchResults() {
-                    return this.searchViewMode === 'top' ? this.searchTopResults : this.searchBottomResults;
+                    if (this.searchViewMode === 'top') {
+                        return this.searchTopResults;
+                    }
+                    // bottom 倒序展示：最正的排在最上面，重新计算 rank
+                    const reversed = [...this.searchBottomResults].reverse();
+                    return reversed.map((r, i) => ({ ...r, rank: i + 1 }));
+                }
+            },
+            watch: {
+                searchTopResults() { this.scheduleChartRender(); },
+                searchBottomResults() { this.scheduleChartRender(); },
+                activeTab(val) {
+                    if (val === 'search') this.scheduleChartRender();
+                },
+                searchForm: {
+                    handler(val) {
+                        // 自动保存搜索表单到 localStorage（避免刷新后丢失）
+                        try {
+                            const formData = {
+                                upGenes: val.upGenes,
+                                downGenes: val.downGenes,
+                                topK: val.topK,
+                                algorithm: val.algorithm,
+                                upGenesRaw: val.upGenesRaw,
+                                downGenesRaw: val.downGenesRaw
+                            };
+                            localStorage.setItem('cmap_search_form_v2', JSON.stringify(formData));
+                        } catch (e) {
+                            // localStorage 已满时静默忽略
+                        }
+                    },
+                    deep: true
+                }
+            },
+            mounted() {
+                // 1. 恢复搜索表单数据
+                const savedForm = localStorage.getItem('cmap_search_form_v2');
+                if (savedForm) {
+                    try {
+                        const form = JSON.parse(savedForm);
+                        this.searchForm.upGenes = form.upGenes || '';
+                        this.searchForm.downGenes = form.downGenes || '';
+                        this.searchForm.topK = form.topK || 50;
+                        this.searchForm.algorithm = form.algorithm || 'tau';
+                        if (form.upGenesRaw) this.searchForm.upGenesRaw = form.upGenesRaw;
+                        if (form.downGenesRaw) this.searchForm.downGenesRaw = form.downGenesRaw;
+                    } catch (e) {
+                        localStorage.removeItem('cmap_search_form_v2');
+                    }
+                }
+
+                // 2. 恢复 Tau 异步任务状态
+                const saved = localStorage.getItem('cmap_tau_job');
+                if (saved) {
+                    try {
+                        const job = JSON.parse(saved);
+                        if (job.jobId && (job.status === 'pending' || job.status === 'running')) {
+                            this.tauJobId = job.jobId;
+                            this.isSearching = true;
+                            this.searchProgress = { show: true, percent: job.percent || 0, current: 0, total: 473647, batch: 0, totalBatches: 95 };
+                            this.startTauPolling();
+                        } else if (job.jobId && job.status === 'completed' && job.result) {
+                            // 已有完成结果，直接恢复显示
+                            this.handleTauJobResult(job.result);
+                        }
+                    } catch (e) {
+                        localStorage.removeItem('cmap_tau_job');
+                    }
+                }
+            },
+            beforeDestroy() {
+                if (this.tauPollTimer) {
+                    clearTimeout(this.tauPollTimer);
                 }
             },
             methods: {
-                // CSV 文件处理
+                // CSV / XLSX 文件处理
                 handleCsvFileSelect(event) {
                     const file = event.target.files[0];
-                    if (file && file.name.endsWith('.csv')) {
+                    const name = file ? file.name.toLowerCase() : '';
+                    if (file && (name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls'))) {
                         this.csvForm.file = file;
                         this.csvError = '';
                     } else {
                         this.csvForm.file = null;
-                        this.csvError = '请选择 CSV 文件';
+                        this.csvError = '请选择 CSV 或 XLSX 文件';
                     }
                 },
 
                 async parseCsvFile() {
                     if (!this.csvForm.file) {
-                        this.csvError = '请选择 CSV 文件';
+                        this.csvError = '请选择 CSV 或 XLSX 文件';
                         return;
                     }
 
                     this.isParsingCsv = true;
                     this.csvError = '';
                     this.csvWarning = '';
+                    this.csvMissingUp = [];
+                    this.csvMissingDown = [];
 
                     const formData = new FormData();
                     formData.append('file', this.csvForm.file);
@@ -623,7 +794,7 @@
                     formData.append('top_n', this.csvForm.topN);
 
                     try {
-                        const res = await fetch('http://localhost:8000/api/v1/parse_csv', {
+                        const res = await fetch(`${this.apiBaseUrl}/api/v1/parse_csv`, {
                             method: 'POST',
                             body: formData
                         });
@@ -635,9 +806,17 @@
 
                         const data = await res.json();
 
-                        // 填入搜索框
-                        this.searchForm.upGenes = data.up_genes.join(', ');
-                        this.searchForm.downGenes = data.down_genes.join(', ');
+                        // 保存无效基因信息
+                        this.csvMissingUp = data.missing_up || [];
+                        this.csvMissingDown = data.missing_down || [];
+
+                        // 填入搜索框（显示 Gene Symbol，同时保存 Entrez ID 用于计算）
+                        this.searchForm.upGenes = data.up_symbols.join(', ');
+                        this.searchForm.downGenes = data.down_symbols.join(', ');
+
+                        // 保存原始 Entrez ID 用于后端计算
+                        this.searchForm.upGenesRaw = data.up_genes;
+                        this.searchForm.downGenesRaw = data.down_genes;
 
                         /* 注释掉：显示警告
                         if (data.warning) {
@@ -660,7 +839,7 @@
                     if (!text.trim()) return 0;
                     return text.split(/[\n,]+/)
                         .map(g => g.trim())
-                        .filter(g => /^\d+$/.test(g))
+                        .filter(g => g.length > 0)
                         .length;
                 },
 
@@ -668,18 +847,55 @@
                     if (!text.trim()) return [];
                     return text.split(/[\n,]+/)
                         .map(g => g.trim())
-                        .filter(g => /^\d+$/.test(g))
-                        .map(Number);
+                        .filter(g => g.length > 0);
+                },
+
+                async convertSymbolsToIds(symbols) {
+                    try {
+                        const res = await fetch(`${this.apiBaseUrl}/api/v1/convert_to_ids`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(symbols)
+                        });
+                        if (!res.ok) throw new Error('转换失败');
+                        const data = await res.json();
+                        if (data.missing.length > 0) {
+                            alert(`以下基因无法识别: ${data.missing.join(', ')}`);
+                        }
+                        return data.ids;
+                    } catch (e) {
+                        console.error('转换失败:', e);
+                        return [];
+                    }
                 },
 
                 async performSearch() {
-                    const up = this.parseGenes(this.searchForm.upGenes);
-                    const down = this.parseGenes(this.searchForm.downGenes);
+                    // 如果是从 CSV 上传的，使用原始 Entrez ID
+                    let up, down;
+                    if (this.searchForm.upGenesRaw && this.searchForm.downGenesRaw) {
+                        up = this.searchForm.upGenesRaw;
+                        down = this.searchForm.downGenesRaw;
+                    } else {
+                        // 手动输入：先解析 Gene Symbol，然后转换为 Entrez ID
+                        const upSymbols = this.parseGenes(this.searchForm.upGenes);
+                        const downSymbols = this.parseGenes(this.searchForm.downGenes);
 
-                    if (up.length === 0 || down.length === 0) {
-                        this.searchError = '请输入有效的基因ID（仅支持数字）';
+                        if (upSymbols.length === 0 || downSymbols.length === 0) {
+                            this.searchError = '请输入有效的基因名称';
+                            return;
+                        }
+
+                        up = await this.convertSymbolsToIds(upSymbols);
+                        down = await this.convertSymbolsToIds(downSymbols);
+                    }
+
+                    if (up.length === 0) {
+                        this.searchError = '请输入有效的上调基因';
                         return;
                     }
+
+                    // 清理可能存在的旧 Tau 异步任务
+                    this.clearTauJobState();
 
                     this.isSearching = true;
                     this.searchError = '';
@@ -693,9 +909,15 @@
                         return;
                     }
 
+                    // Tau 算法（完整后处理流程）
+                    if (this.searchForm.algorithm === 'tau') {
+                        await this.performSearchTau(up, down);
+                        return;
+                    }
+
                     // 余弦相似度使用普通接口
                     try {
-                        const res = await fetch('http://localhost:8000/api/v1/search', {
+                        const res = await fetch(`${this.apiBaseUrl}/api/v1/search`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ up_genes: up, down_genes: down, top_k: this.searchForm.topK })
@@ -719,7 +941,7 @@
                     return new Promise((resolve, reject) => {
                         const payload = JSON.stringify({ up_genes: up, down_genes: down, top_k: this.searchForm.topK });
 
-                        fetch('http://localhost:8000/api/v1/search_wtcs_stream', {
+                        fetch(`${this.apiBaseUrl}/api/v1/search_wtcs_stream`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: payload
@@ -807,13 +1029,323 @@
                     }
                 },
 
+                // ==================== Tau 异步任务 ====================
+                async performSearchTau(up, down) {
+                    // 如果已有正在进行的任务，先清理
+                    this.clearTauJobState();
+
+                    this.isSearching = true;
+                    this.searchError = '';
+                    this.searchTopResults = [];
+                    this.searchBottomResults = [];
+                    this.searchViewMode = 'top';
+                    this.searchProgress = { show: true, percent: 0, current: 0, total: 473647, batch: 0, totalBatches: 95, stage: 'submitting' };
+
+                    try {
+                        // 1. 提交异步任务
+                        const res = await fetch(`${this.apiBaseUrl}/api/v1/submit_tau`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                up_genes: up,
+                                down_genes: down,
+                                top_k: 150,
+                                bottom_k: 150
+                            })
+                        });
+
+                        if (!res.ok) throw new Error((await res.json()).detail || '提交失败');
+
+                        const submitData = await res.json();
+                        this.tauJobId = submitData.job_id;
+
+                        // 保存到 localStorage，页面刷新后可恢复
+                        this.saveTauJobState({ jobId: this.tauJobId, status: 'pending', percent: 0 });
+
+                        // 2. 开始轮询
+                        this.startTauPolling();
+                    } catch (e) {
+                        this.searchError = e.message || '提交任务失败';
+                        this.isSearching = false;
+                        this.searchProgress.show = false;
+                    }
+                },
+
+                startTauPolling() {
+                    if (this.tauPollTimer) clearTimeout(this.tauPollTimer);
+                    this.pollTauJob();
+                },
+
+                async pollTauJob() {
+                    if (!this.tauJobId) return;
+
+                    try {
+                        const res = await fetch(`${this.apiBaseUrl}/api/v1/tau_job/${this.tauJobId}`);
+                        if (!res.ok) {
+                            if (res.status === 404) {
+                                this.searchError = '任务不存在或已过期';
+                                this.clearTauJobState();
+                                this.isSearching = false;
+                                this.searchProgress.show = false;
+                                return;
+                            }
+                            throw new Error('查询状态失败');
+                        }
+
+                        const job = await res.json();
+
+                        // 更新进度显示
+                        if (job.progress) {
+                            const percent = job.progress.percent || 0;
+                            this.searchProgress = {
+                                show: true,
+                                percent: percent,
+                                current: job.progress.batch || 0,
+                                total: job.progress.total_batches || 95,
+                                batch: job.progress.batch || 0,
+                                totalBatches: job.progress.total_batches || 95,
+                                stage: job.progress.stage || 'running'
+                            };
+                            this.saveTauJobState({ jobId: this.tauJobId, status: job.status, percent: percent });
+                        }
+
+                        if (job.status === 'pending' || job.status === 'running') {
+                            // 继续轮询，每 5 秒一次
+                            this.tauPollTimer = setTimeout(() => this.pollTauJob(), 5000);
+                        } else if (job.status === 'completed') {
+                            this.handleTauJobResult(job.result);
+                            this.saveTauJobState({ jobId: this.tauJobId, status: 'completed', percent: 100, result: job.result });
+                            this.isSearching = false;
+                            this.searchProgress.show = false;
+                        } else if (job.status === 'failed') {
+                            this.searchError = job.error || '任务执行失败';
+                            this.clearTauJobState();
+                            this.isSearching = false;
+                            this.searchProgress.show = false;
+                        }
+                    } catch (e) {
+                        // 网络错误时继续轮询（比如VPN临时断开）
+                        console.warn('轮询出错，5秒后重试:', e);
+                        this.tauPollTimer = setTimeout(() => this.pollTauJob(), 5000);
+                    }
+                },
+
+                handleTauJobResult(data) {
+                    if (!data) return;
+                    // Tau结果需要字段映射以兼容现有表格显示
+                    this.searchTopResults = data.top_results.map(r => ({
+                        rank: r.rank,
+                        sig_id: r.pert_iname,
+                        drug: r.pert_iname,
+                        cell_line: r.best_cell_id,
+                        dose: r.best_dose,
+                        score: r.tau_score,
+                        pert_type: r.pert_type,
+                        cell_count: r.cell_count,
+                        summary_ncs: r.summary_ncs,
+                        best_wtcs: r.best_wtcs,
+                        is_touchstone: r.is_touchstone
+                    }));
+
+                    this.searchBottomResults = data.bottom_results.map(r => ({
+                        rank: r.rank,
+                        sig_id: r.pert_iname,
+                        drug: r.pert_iname,
+                        cell_line: r.best_cell_id,
+                        dose: r.best_dose,
+                        score: r.tau_score,
+                        pert_type: r.pert_type,
+                        cell_count: r.cell_count,
+                        summary_ncs: r.summary_ncs,
+                        best_wtcs: r.best_wtcs,
+                        is_touchstone: r.is_touchstone
+                    }));
+
+                    this.searchStats = { upCount: data.query_up_count, downCount: data.query_down_count };
+                },
+
+                saveTauJobState(state) {
+                    try {
+                        localStorage.setItem('cmap_tau_job', JSON.stringify(state));
+                    } catch (e) {
+                        // localStorage 可能已满，忽略
+                    }
+                },
+
+                clearTauJobState() {
+                    this.tauJobId = null;
+                    if (this.tauPollTimer) {
+                        clearTimeout(this.tauPollTimer);
+                        this.tauPollTimer = null;
+                    }
+                    localStorage.removeItem('cmap_tau_job');
+                },
+
+                // ============ 得分分布图（ECharts） ============
+                scheduleChartRender() {
+                    this.$nextTick(() => this.renderScoreChart());
+                },
+
+                renderScoreChart() {
+                    const el = document.getElementById('scoreChart');
+                    if (!el || typeof echarts === 'undefined') return;
+                    // Tab 切换后 DOM 被重建，旧实例需销毁重新 init
+                    if (this._scoreChart && this._scoreChart.getDom() !== el) {
+                        this._scoreChart.dispose();
+                        this._scoreChart = null;
+                    }
+                    if (!this._scoreChart) {
+                        this._scoreChart = echarts.init(el);
+                        window.addEventListener('resize', () => {
+                            if (this._scoreChart) this._scoreChart.resize();
+                        });
+                        this._scoreChart.on('click', p => {
+                            if (p.seriesIndex === 1) this.highlightChartPoint(p.data[2]);
+                        });
+                    }
+                    // 合并 top+bottom，按得分降序 → 瀑布形态
+                    const data = [...this.searchTopResults, ...this.searchBottomResults]
+                        .sort((a, b) => b.score - a.score);
+                    this._chartData = data;
+                    if (data.length === 0) { this._scoreChart.clear(); return; }
+
+                    const self = this;
+                    this._scoreChart.setOption({
+                        animationDuration: 600,
+                        animationDurationUpdate: 400,
+                        animationEasingUpdate: 'cubicOut',
+                        grid: { left: 60, right: 24, top: 32, bottom: 56 },
+                        tooltip: {
+                            trigger: 'item',
+                            triggerOn: 'mousemove|click',
+                            backgroundColor: 'rgba(15,23,42,0.92)',
+                            borderWidth: 0,
+                            textStyle: { color: '#e2e8f0', fontSize: 12 },
+                            formatter(p) {
+                                const r = self._chartData[p.data[2]];
+                                if (!r) return '';
+                                const dir = r.score < 0 ? '↓ 逆转' : '↑ 匹配';
+                                let html = `<div style="font-weight:600;margin-bottom:4px;">${r.drug}</div>`;
+                                html += `<div>得分：${r.score.toFixed(4)}（${dir}）</div>`;
+                                if (r.best_wtcs !== undefined && r.best_wtcs !== null) {
+                                    html += `<div>WTCS：${r.best_wtcs.toFixed(4)}</div>`;
+                                }
+                                html += `<div>扰动类型：${r.pert_type || '-'}</div>`;
+                                html += `<div>Touchstone：${r.is_touchstone ? '是' : '否'}</div>`;
+                                if (r.cell_line) html += `<div>细胞系：${r.cell_line}</div>`;
+                                if (r.dose) html += `<div>浓度：${r.dose}</div>`;
+                                return html;
+                            }
+                        },
+                        xAxis: {
+                            type: 'value',
+                            name: '药物（按得分降序）',
+                            nameLocation: 'middle',
+                            nameGap: 30,
+                            nameTextStyle: { color: '#94a3b8' },
+                            min: 0,
+                            max: data.length - 1,
+                            axisLabel: { color: '#94a3b8' },
+                            splitLine: { show: false }
+                        },
+                        yAxis: {
+                            type: 'value',
+                            name: 'Score',
+                            nameTextStyle: { color: '#94a3b8' },
+                            axisLabel: { color: '#94a3b8' },
+                            splitLine: { lineStyle: { color: 'rgba(148,163,184,0.15)' } }
+                        },
+                        dataZoom: [
+                            { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+                            { type: 'slider', xAxisIndex: 0, height: 18, bottom: 8, filterMode: 'none',
+                              borderColor: 'rgba(148,163,184,0.3)', textStyle: { color: '#94a3b8' } }
+                        ],
+                        series: [
+                            {
+                                name: '趋势',
+                                type: 'line',
+                                data: data.map((r, i) => [i, r.score, i]),
+                                showSymbol: false,
+                                silent: true,
+                                lineStyle: { color: 'rgba(148,163,184,0.45)', width: 1.5 },
+                                z: 1,
+                                markLine: {
+                                    silent: true,
+                                    symbol: 'none',
+                                    label: { show: false },
+                                    lineStyle: { color: 'rgba(148,163,184,0.5)', type: 'dashed' },
+                                    data: [{ yAxis: 0 }]
+                                }
+                            },
+                            {
+                                name: '药物',
+                                type: 'scatter',
+                                data: data.map((r, i) => [i, r.score, i]),
+                                symbolSize: 9,
+                                itemStyle: {
+                                    color: p => p.data[1] < 0 ? '#34d399' : '#f87171',
+                                    opacity: 0.9
+                                },
+                                emphasis: {
+                                    scale: 1.6,
+                                    itemStyle: { opacity: 1, shadowBlur: 8, shadowColor: 'rgba(255,255,255,0.35)' }
+                                },
+                                z: 3
+                            },
+                            {
+                                name: '定位',
+                                type: 'effectScatter',
+                                data: [],
+                                symbolSize: 16,
+                                rippleEffect: { brushType: 'stroke', scale: 3 },
+                                itemStyle: { color: '#fbbf24' },
+                                silent: true,
+                                z: 10
+                            }
+                        ]
+                    }, true);
+                },
+
+                highlightChartPoint(idx) {
+                    if (!this._scoreChart || !this._chartData) return;
+                    const r = this._chartData[idx];
+                    if (!r) return;
+                    this._scoreChart.setOption({
+                        series: [{}, {}, { data: [[idx, r.score, idx]] }]
+                    });
+                },
+
+                locateChartDrug() {
+                    const q = this.chartDrugQuery.trim().toLowerCase();
+                    if (!q || !this._chartData || this._chartData.length === 0) return;
+                    // 先精确匹配，再子串匹配（大小写不敏感）
+                    let idx = this._chartData.findIndex(r => (r.drug || '').toLowerCase() === q);
+                    if (idx < 0) idx = this._chartData.findIndex(r => (r.drug || '').toLowerCase().includes(q));
+                    if (idx < 0) {
+                        this.chartLocateError = `未找到药物 "${this.chartDrugQuery}"`;
+                        return;
+                    }
+                    this.chartLocateError = '';
+                    this.highlightChartPoint(idx);
+                    // 缩放窗口居中到目标点
+                    const n = this._chartData.length;
+                    const span = Math.max(9, Math.floor(n * 0.15));
+                    const start = Math.max(0, Math.min(idx - Math.floor(span / 2), n - 1 - span));
+                    this._scoreChart.dispatchAction({
+                        type: 'dataZoom', startValue: start, endValue: start + span
+                    });
+                    this._scoreChart.dispatchAction({
+                        type: 'showTip', seriesIndex: 1, dataIndex: idx
+                    });
+                },
+
                 async performExtract() {
                     this.isExtracting = true;
                     this.extractError = '';
                     this.extractResult = null;
 
                     try {
-                        const res = await fetch('http://localhost:8000/api/v1/extract', {
+                        const res = await fetch(`${this.apiBaseUrl}/api/v1/extract`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -844,90 +1376,64 @@
                 },
 
                 async exportResults() {
-                    // 检查是否有搜索结果
                     if (!this.searchTopResults?.length || !this.searchBottomResults?.length) {
                         alert('请先进行搜索，有结果后才能导出');
                         return;
                     }
 
+                    this.isExporting = true;
                     try {
-                        // 根据算法选择文件名
-                        const isWtcs = this.searchForm.algorithm === 'wtcs';
-                        const scoreLabel = isWtcs ? 'wtcs_score' : 'cosine_score';
+                        const algorithm = this.searchForm.algorithm === 'tau' ? 'tau'
+                                        : this.searchForm.algorithm === 'wtcs' ? 'wtcs'
+                                        : 'cosine';
 
-                        // 生成 Top CSV
-                        const topCsv = this._generateCSV(this.searchTopResults, scoreLabel);
-                        // 生成 Bottom CSV
-                        const bottomCsv = this._generateCSV(this.searchBottomResults, scoreLabel);
+                        const response = await fetch(`${this.apiBaseUrl}/api/v1/export_data`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                algorithm: algorithm,
+                                top_results: this.searchTopResults,
+                                bottom_results: this.searchBottomResults
+                            })
+                        });
 
-                        // 打包为 zip 并下载
-                        await this._downloadZip(topCsv, bottomCsv, isWtcs);
+                        if (!response.ok) {
+                            const err = await response.json().catch(() => ({}));
+                            throw new Error(err.detail || '导出请求失败');
+                        }
+
+                        const { download_url } = await response.json();
+
+                        // 用 fetch 下载 ZIP，避免直接跳转被浏览器安全策略拦截
+                        const downloadRes = await fetch(this.apiBaseUrl + download_url, {
+                            method: 'GET'
+                        });
+                        if (!downloadRes.ok) {
+                            const err = await downloadRes.json().catch(() => ({}));
+                            throw new Error(err.detail || '下载文件失败');
+                        }
+
+                        const blob = await downloadRes.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'cmap_search_results.zip';
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }, 5000);
 
                     } catch (e) {
                         alert('导出失败: ' + (e.message || '未知错误'));
+                    } finally {
+                        this.isExporting = false;
                     }
                 },
 
-                // 生成 CSV 字符串
-                _generateCSV(results, scoreLabel) {
-                    const headers = ['rank', 'sig_id', 'drug', 'cell_line', 'dose', 'pert_type', scoreLabel];
-                    const rows = results.map(r => [
-                        r.rank,
-                        r.sig_id,
-                        this._escapeCsvField(r.drug),
-                        r.cell_line,
-                        r.dose,
-                        r.pert_type || '',
-                        r.score.toFixed(6)
-                    ]);
-                    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-                },
-
-                // 转义 CSV 字段（处理逗号、引号、换行）
-                _escapeCsvField(field) {
-                    if (field === null || field === undefined) return '';
-                    const str = String(field);
-                    // 如果包含逗号、引号或换行，需要用引号包裹并转义内部引号
-                    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                        return '"' + str.replace(/"/g, '""') + '"';
-                    }
-                    return str;
-                },
-
-                // 下载 zip 文件
-                async _downloadZip(topCsv, bottomCsv, isWtcs) {
-                    const JSZip = await this._loadJSZip();
-                    const zip = new JSZip();
-
-                    const topFilename = isWtcs ? 'top_reversals_wtcs.csv' : 'top_reversals.csv';
-                    const bottomFilename = isWtcs ? 'bottom_matches_wtcs.csv' : 'bottom_matches.csv';
-
-                    zip.file(topFilename, topCsv);
-                    zip.file(bottomFilename, bottomCsv);
-
-                    const blob = await zip.generateAsync({ type: 'blob' });
-                    const url = URL.createObjectURL(blob);
-
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = isWtcs ? 'cmap_wtcs_results.zip' : 'cmap_search_results.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                },
-
-                // 动态加载 JSZip 库
-                async _loadJSZip() {
-                    if (window.JSZip) return window.JSZip;
-
-                    return new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-                        script.onload = () => resolve(window.JSZip);
-                        script.onerror = () => reject(new Error('无法加载 JSZip 库'));
-                        document.head.appendChild(script);
-                    });
+                async safeExportResults() {
+                    await this.exportResults();
                 },
 
                 downloadVector() {
@@ -937,8 +1443,12 @@
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = `${this.extractResult.drug}_vector.json`;
+                    document.body.appendChild(a);
                     a.click();
-                    URL.revokeObjectURL(url);
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 5000);
                 }
             }
         });

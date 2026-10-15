@@ -11,7 +11,7 @@ from ..models.schemas import SearchRequest, SearchResponse, SearchResult
 from ..core.metadata_index import MetadataIndex
 from ..core.matrix_store import MatrixStore
 from ..scoring.cosine_scorer import CosineScorer
-from ..config import N_GENES, ROW_NAMES_PATH
+from ..config import N_GENES, N_SIGS, ROW_NAMES_PATH
 import pandas as pd
 
 router = APIRouter()
@@ -67,6 +67,10 @@ async def search_reversals(request: SearchRequest):
     scorer = get_scorer()
     gene_to_idx = get_gene_to_idx()
 
+    # 防御：top_k 不能超过总数的一半，避免前后结果重叠
+    max_top_k = N_SIGS // 2
+    top_k = min(request.top_k, max_top_k)
+
     # 1. 构建查询向量
     query_vector = np.zeros(N_GENES, dtype=np.float32)
 
@@ -96,7 +100,7 @@ async def search_reversals(request: SearchRequest):
     top_indices, top_scores, bottom_indices, bottom_scores = scorer.top_k_both(
         query_vector,
         batch_iterator,
-        k=request.top_k
+        k=top_k
     )
 
     # 3. 获取元数据

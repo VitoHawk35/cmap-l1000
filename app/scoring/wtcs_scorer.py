@@ -56,11 +56,11 @@ class WTCSScorer(BaseScorer):
             down_unique = [idx for idx in down_unique if idx not in overlap]
             print(f"[WTCS Warning] 上调和下调基因存在 {len(overlap)} 个重叠项，已自动移除: {list(overlap)[:5]}...")
 
-        if len(up_unique) == 0 or len(down_unique) == 0:
-            raise ValueError(f"去重后基因数量不足（上调:{len(up_unique)}, 下调:{len(down_unique)}）")
+        if len(up_unique) == 0:
+            raise ValueError(f"去重后上调基因数量不足（上调:{len(up_unique)}, 下调:{len(down_unique)}）")
 
         self.up_indices = np.array(up_unique, dtype=np.int32)
-        self.down_indices = np.array(down_unique, dtype=np.int32)
+        self.down_indices = np.array(down_unique, dtype=np.int32) if down_unique else np.array([], dtype=np.int32)
         self.n_up = len(up_unique)
         self.n_down = len(down_unique)
 
@@ -70,10 +70,11 @@ class WTCSScorer(BaseScorer):
         self._up_indicator[self.up_indices] = 1.0
 
         self._down_indicator = np.zeros(N_GENES, dtype=np.float32)
-        self._down_indicator[self.down_indices] = 1.0
+        if self.n_down > 0:
+            self._down_indicator[self.down_indices] = 1.0
 
-        if self.n_up == 0 or self.n_down == 0:
-            raise ValueError("上调基因和下调基因列表不能为空")
+        if self.n_up == 0:
+            raise ValueError("上调基因列表不能为空")
 
     def _compute_es_batch(
         self,
@@ -83,24 +84,13 @@ class WTCSScorer(BaseScorer):
     ) -> np.ndarray:
         """
         向量化计算富集得分 (Enrichment Score)
-
-        Args:
-            sorted_indices: (N_GENES, batch_size) 每列的排序索引
-                           sorted_indices[i, j] 表示第 j 列第 i 大表达量的基因的原始索引
-            indicator: (N_GENES,) query 基因指示向量（1表示是query基因）
-            n_query: query 基因数量
-
-        Returns:
-            es: (batch_size,) 每列的富集得分（带符号）
         """
         batch_size = sorted_indices.shape[1]
 
         # 使用高级索引获取 hit 矩阵 (N_GENES, batch_size)
-        # hit[i, j] = 1 表示第 j 列中第 i 大的基因是 query 基因
         hit = indicator[sorted_indices].reshape(N_GENES, batch_size)
 
         # 累积命中分布（query 基因在排序列表中的累积比例）
-        # cumsum_hit[i, j] = 前 i 个基因中 query 基因的比例
         cumsum_hit = np.cumsum(hit, axis=0) / n_query  # (N_GENES, batch_size)
 
         # 累积缺失分布（非 query 基因在排序列表中的累积比例）
@@ -114,7 +104,6 @@ class WTCSScorer(BaseScorer):
         max_indices = np.argmax(abs_diff, axis=0)  # (batch_size,)
 
         # 获取最大偏差值（保留符号）
-        # 使用 np.take_along_axis 获取每列的最大偏差
         max_diff = np.take_along_axis(
             diff,
             max_indices.reshape(1, -1),
@@ -126,32 +115,29 @@ class WTCSScorer(BaseScorer):
     def _compute_wtcs_batch(self, chunk: np.ndarray) -> np.ndarray:
         """
         向量化计算 WTCS 分数
-
-        Args:
-            chunk: (N_GENES, batch_size) 基因表达矩阵
-
-        Returns:
-            wtcs: (batch_size,) 每列的 WTCS 分数
         """
         batch_size = chunk.shape[1]
 
         # 1. 沿 axis=0 降序排序，获取排序索引
-        # sorted_indices[i, j] = 第 j 列中第 i 大表达量的基因的原始索引
         sorted_indices = np.argsort(-chunk, axis=0, kind='mergesort')  # (N_GENES, batch_size)
 
         # 2. 计算 ES_up（上调基因的富集得分）
         es_up = self._compute_es_batch(sorted_indices, self._up_indicator, self.n_up)
 
         # 3. 计算 ES_down（下调基因的富集得分）
-        es_down = self._compute_es_batch(sorted_indices, self._down_indicator, self.n_down)
+        if self.n_down > 0:
+            es_down = self._compute_es_batch(sorted_indices, self._down_indicator, self.n_down)
 
-        # 4. 计算 WTCS
-        # 如果 ES_up 和 ES_down 符号相反，WTCS = (ES_up - ES_down) / 2
-        # 否则 WTCS = 0
-        opposite_signs = (es_up * es_down) < 0  # 符号相反
+            # 4. 计算 WTCS
+            # 如果 ES_up 和 ES_down 符号相反，WTCS = (ES_up - ES_down) / 2
+            # 否则 WTCS = 0
+            opposite_signs = (es_up * es_down) < 0  # 符号相反
 
-        wtcs = np.zeros(batch_size, dtype=np.float32)
-        wtcs[opposite_signs] = (es_up[opposite_signs] - es_down[opposite_signs]) / 2.0
+            wtcs = np.zeros(batch_size, dtype=np.float32)
+            wtcs[opposite_signs] = (es_up[opposite_signs] - es_down[opposite_signs]) / 2.0
+        else:
+            # 下调为空时，WTCS = ES_up（仅考虑上调基因的富集）
+            wtcs = es_up
 
         return wtcs
 

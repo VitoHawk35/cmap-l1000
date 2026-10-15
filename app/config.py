@@ -22,14 +22,20 @@ ROW_NAMES_PATH = os.path.join(DATA_DIR, "row_gene_ids.csv")
 # 原始元数据文件
 SIG_INFO_PATH = os.path.join(DATA_DIR, "GSE92742_Broad_LINCS_sig_info.txt.gz")
 GENE_INFO_PATH = os.path.join(DATA_DIR, "GSE92742_Broad_LINCS_gene_info.txt.gz")
+PERT_INFO_PATH = os.path.join(DATA_DIR, "GSE92742_Broad_LINCS_pert_info.txt.gz")
+
+# Touchstone 核心参考数据库（用于 NCS 归一化和 Tau 计算）
+TOUCHSTONE_DIR = os.path.join(PROJECT_ROOT, "touchstone_data")
+TOUCHSTONE_GCTX_PATH = os.path.join(TOUCHSTONE_DIR, "touchstone_score.gctx")
+TOUCHSTONE_SIGINFO_PATH = os.path.join(TOUCHSTONE_DIR, "touchstone_siginfo.txt")
 
 # ============ 矩阵维度 ============
 N_GENES = 12328
 N_SIGS = 473647
 
 # ============ API 配置 ============
-API_HOST = "0.0.0.0"
-API_PORT = 8000
+API_HOST = os.getenv("API_HOST", "0.0.0.0")
+API_PORT = int(os.getenv("API_PORT", "8000"))
 
 # ============ 搜索配置 ============
 DEFAULT_TOP_K = 50

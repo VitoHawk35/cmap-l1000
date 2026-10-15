@@ -95,7 +95,7 @@ async def export_results_wtcs(request: SearchRequest):
         if gene_id_str in gene_to_idx:
             down_indices.append(gene_to_idx[gene_id_str])
 
-    if len(up_indices) == 0 or len(down_indices) == 0:
+    if len(up_indices) == 0:
         raise HTTPException(
             status_code=400,
             detail=f"有效基因数量不足（上调:{len(up_indices)}, 下调:{len(down_indices)}）"

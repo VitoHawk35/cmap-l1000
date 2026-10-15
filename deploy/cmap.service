@@ -1,0 +1,37 @@
+# systemd 服务配置
+# 复制到 /etc/systemd/system/cmap.service
+# 然后执行: systemctl enable cmap && systemctl start cmap
+
+[Unit]
+Description=CMAP L1000 API Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/home/keji/cmap
+
+# 环境变量
+Environment="PYTHONUNBUFFERED=1"
+Environment="PATH=/home/keji/cmap/venv/bin:$PATH"
+
+# 启动命令（4工作进程，根据CPU核心调整）
+ExecStart=/home/keji/cmap/venv/bin/gunicorn \
+    -w 4 \
+    -k uvicorn.workers.UvicornWorker \
+    --bind 127.0.0.1:8001 \
+    --timeout 300 \
+    --keep-alive 60 \
+    --access-logfile /var/log/cmap/access.log \
+    --error-logfile /var/log/cmap/error.log \
+    --capture-output \
+    --enable-stdio-inheritance \
+    app.main:app
+
+# 重启策略
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
