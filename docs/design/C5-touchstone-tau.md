@@ -75,7 +75,7 @@ ssh -i ~/.ssh/lmna_deploy keji@10.39.15.238 \
 
 | 文件 | 大小 | 说明 |
 |---|---:|---|
-| `touchstone_score.gctx` | 14,836,692,414 B (13.8 GiB) | Touchstone 表达矩阵，HDF5/GCTX；按签名数 293,619 × 12,328 float32 推算约 14.9 GB（约 13.9 GiB），实施前需用 `h5py` 校验维度与方向 |
+| `touchstone_score.gctx` | 14,836,692,414 B（约 14.84 GB / 13.82 GiB） | Touchstone 表达矩阵，HDF5/GCTX；与 293,619 × 12,328 float32 的理论大小 14.48 GB 基本一致（差额为 GCTX 元数据/索引），实施前需用 `h5py` 校验维度与方向 |
 | `touchstone_sig_ids.txt` | 10,682,390 B | 293,619 条签名 ID |
 | `touchstone_siginfo.txt` | 63,898,307 B | 签名元数据（sig_id、pert_id、pert_iname、pert_type、cell_id、dose、time 等） |
 | `touchstone_pert_ids.txt` | 341,420 B | 21,577 个 Touchstone `pert_id` |
@@ -742,6 +742,8 @@ export CMAP_REF_REQUIRED=0
 ### 11.3 自连接（同一药物、不同细胞系）
 
 构造：选 20 个在 Touchstone 中覆盖 ≥3 个细胞系的药物；对每个药物，用细胞系 A 的签名取 top150 上/下调作为查询，运行完整线上流程，观察该药物在结果中的位置与 `tau_ref`。
+
+评估时必须排除源签名本身及其同 `distil_id` 的技术重复（它们与查询基因集完全同源，会被人为推到第 1 名）；保留该药物在其他细胞系、其他剂量/时间下的实例，这才是“自连接”要检验的信号。
 
 验收：
 
