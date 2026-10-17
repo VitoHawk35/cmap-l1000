@@ -11,6 +11,7 @@ from typing import List, Dict, Tuple, Any
 
 import pandas as pd
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from ..config import GENE_INFO_PATH, CSV_TOP_N_MAX
 
@@ -94,41 +95,10 @@ def _load_gene_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
     return _symbol_to_entrez, _entrez_to_symbol
 
 
-@router.post("/parse_csv")
-async def parse_csv(
-    file: UploadFile = File(...),
-    pvalue_threshold: float = Form(0.05),
-    top_n: int = Form(50)
-) -> Dict[str, Any]:
-    """
-    解析差异基因 CSV/XLSX 文件，提取上下调基因并映射为 Entrez ID
-
-    Args:
-        file: CSV 或 XLSX 文件（需包含 gene/logFC/PValue 列）
-        pvalue_threshold: P值阈值（默认0.05）
-        top_n: 取前N个上调和前N个下调
-
-    Returns:
-        {
-            "up_genes": [...], "down_genes": [...],
-            "up_symbols": [...], "down_symbols": [...],
-            "missing_up": [...], "missing_down": [...],
-            "warning": "..." (可选)
-        }
-    """
-    # 服务端校验：top_n 与前端输入框保持一致（默认 10-150，上限可配置）
-    if not 10 <= top_n <= CSV_TOP_N_MAX:
-        raise HTTPException(
-            status_code=422,
-            detail="top_n 必须在 10 到 {} 之间".format(CSV_TOP_N_MAX)
-        )
-
-    filename = file.filename.lower()
-    is_xlsx = filename.endswith('.xlsx') or filename.endswith('.xls')
+def _parse_csv_content(content: bytes, filename: str, pvalue_threshold: float,
+                       top_n: int) -> Dict[str, Any]:
+    """同步解析 CSV/XLSX 内容（在线程池中执行，避免阻塞事件循环）"""
     is_csv = filename.endswith('.csv')
-
-    if not (is_csv or is_xlsx):
-        raise HTTPException(status_code=400, detail="请上传 CSV 或 XLSX 文件")
 
     # 读取基因映射
     symbol_to_entrez, entrez_to_symbol = _load_gene_mapping()
@@ -136,9 +106,6 @@ async def parse_csv(
         raise HTTPException(status_code=500, detail="基因映射字典加载失败")
 
     try:
-        # 读取文件内容
-        content = await file.read()
-
         if is_csv:
             df = pd.read_csv(io.StringIO(content.decode('utf-8')), header=0)
         else:
@@ -276,8 +243,56 @@ async def parse_csv(
         raise HTTPException(status_code=500, detail=f"处理失败：{str(e)}")
 
 
+@router.post("/parse_csv")
+async def parse_csv(
+    file: UploadFile = File(...),
+    pvalue_threshold: float = Form(0.05),
+    top_n: int = Form(50)
+) -> Dict[str, Any]:
+    """
+    解析差异基因 CSV/XLSX 文件，提取上下调基因并映射为 Entrez ID
+
+    Args:
+        file: CSV 或 XLSX 文件（需包含 gene/logFC/PValue 列）
+        pvalue_threshold: P值阈值（默认0.05）
+        top_n: 取前N个上调和前N个下调
+
+    Returns:
+        {
+            "up_genes": [...], "down_genes": [...],
+            "up_symbols": [...], "down_symbols": [...],
+            "missing_up": [...], "missing_down": [...],
+            "warning": "..." (可选)
+        }
+    """
+    # 服务端校验：top_n 与前端输入框保持一致（默认 10-150，上限可配置）
+    # 必须在 run_in_threadpool 之前执行，越界返回 422
+    if not 10 <= top_n <= CSV_TOP_N_MAX:
+        raise HTTPException(
+            status_code=422,
+            detail="top_n 必须在 10 到 {} 之间".format(CSV_TOP_N_MAX)
+        )
+
+    filename = (file.filename or "").lower()
+    is_xlsx = filename.endswith('.xlsx') or filename.endswith('.xls')
+    is_csv = filename.endswith('.csv')
+
+    if not (is_csv or is_xlsx):
+        raise HTTPException(status_code=400, detail="请上传 CSV 或 XLSX 文件")
+
+    try:
+        # 读取文件（async），解析放入线程池
+        content = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"处理失败：{str(e)}")
+
+    return await run_in_threadpool(
+        _parse_csv_content, content, filename, pvalue_threshold, top_n
+    )
+
+
 @router.post("/convert_to_ids")
-async def convert_to_ids(symbols: List[str]) -> Dict[str, Any]:
+def convert_to_ids(symbols: List[str]) -> Dict[str, Any]:
     """
     将 Gene Symbol 列表转换为 Entrez ID 列表
 

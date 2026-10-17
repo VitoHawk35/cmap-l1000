@@ -16,9 +16,10 @@ WorkingDirectory=/home/keji/cmap
 Environment="PYTHONUNBUFFERED=1"
 Environment="PATH=/home/keji/cmap/venv/bin:$PATH"
 
-# 启动命令（4工作进程，根据CPU核心调整）
+# 启动命令（单 worker + 8 线程：memmap 不共享，Tau 任务线程不能跨 worker 存活）
 ExecStart=/home/keji/cmap/venv/bin/gunicorn \
-    -w 4 \
+    -w 1 \
+    --threads 8 \
     -k uvicorn.workers.UvicornWorker \
     --bind 127.0.0.1:8001 \
     --timeout 300 \

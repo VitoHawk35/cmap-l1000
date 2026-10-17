@@ -25,6 +25,14 @@ from .api.wtcs_search import router as wtcs_search_router
 from .api.export_wtcs import router as export_wtcs_router
 from .api.export_data import router as export_data_router
 from .api.tau_search import router as tau_search_router
+from .core.job_store import fail_interrupted_jobs
+
+
+def _cors_origins_from_env() -> list:
+    """从环境变量 CMAP_CORS_ORIGINS（逗号分隔）读取 CORS 白名单"""
+    raw = os.getenv("CMAP_CORS_ORIGINS", "")
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -33,14 +41,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 配置 CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 配置 CORS：前端已同源托管，默认不启用；跨域来源通过 CMAP_CORS_ORIGINS 显式配置
+CORS_ORIGINS = _cors_origins_from_env()
+if CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # 注册路由
 app.include_router(extract_router, prefix="/api/v1", tags=["特征提取"])
@@ -51,6 +61,14 @@ app.include_router(csv_parser_router, prefix="/api/v1", tags=["CSV解析"])
 app.include_router(export_router, prefix="/api/v1", tags=["结果导出"])
 app.include_router(export_wtcs_router, prefix="/api/v1", tags=["WTCS结果导出"])
 app.include_router(export_data_router, prefix="/api/v1", tags=["通用结果导出"])
+
+
+@app.on_event("startup")
+def _mark_interrupted_jobs_failed():
+    """服务启动时把上次遗留的 pending/running 任务标记为 failed"""
+    failed = fail_interrupted_jobs()
+    if failed:
+        print(f"[Startup] {failed} 个未完成任务已标记为 failed（服务重启，任务中断）")
 
 
 @app.get("/", include_in_schema=False)

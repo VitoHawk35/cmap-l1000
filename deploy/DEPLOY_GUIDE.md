@@ -140,7 +140,7 @@ pip install --upgrade pip
 pip install -r requirements-prod.txt
 
 # 3. 测试启动（前台运行，测试是否正常）
-gunicorn -w 4 \
+gunicorn -w 1 --threads 8 \
   -k uvicorn.workers.UvicornWorker \
   --bind 127.0.0.1:8001 \
   --timeout 300 \
@@ -300,14 +300,11 @@ chmod -R 755 /home/keji/cmap/cmap_data/
 
 ### 1. 调整工作进程数
 
-根据服务器CPU核心数调整：
+**固定 `-w 1 --threads 8`，不要按 CPU 核心数开多 worker**（memmap 不共享；Tau 后台任务运行在 worker 线程中，多 worker 回收会丢任务、状态停留在 running）：
 
 ```bash
-# 查看CPU核心数
-nproc
-
-# 建议: 工作进程数 = CPU核心数
-# 修改 deploy/cmap.service 或 deploy/Dockerfile 中的 -w 参数
+# 修改 deploy/cmap.service、deploy/Dockerfile 或 start.sh 中的 gunicorn 参数
+-w 1 --threads 8
 ```
 
 ### 2. 内存限制

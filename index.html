@@ -643,9 +643,8 @@
             el: '#app',
             data: {
                 activeTab: 'search',
-                // API 基础地址：8001 端口访问时走同源（避免自签名证书跨端口信任问题）；
-                // 兼容旧入口（http://10.39.15.238:8081）仍指向后端绝对地址
-                apiBaseUrl: location.port === '8001' ? '' : 'https://10.39.15.238:8001',
+                // API 基础地址：一律相对路径走同源（前端由后端托管，避免硬编码内网 IP）
+                apiBaseUrl: '',
                 // CSV 解析表单
                 csvForm: { file: null, pvalueThreshold: 0.05, topN: 50 },
                 isParsingCsv: false,

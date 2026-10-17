@@ -77,7 +77,7 @@ def _results_to_csv(results: List[SearchResult]) -> str:
 
 
 @router.post("/export")
-async def export_results(request: SearchRequest):
+def export_results(request: SearchRequest):
     """
     导出搜索结果为 CSV（打包为 zip）
 

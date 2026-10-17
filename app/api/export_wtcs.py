@@ -69,7 +69,7 @@ def _results_to_csv(results: List[SearchResult]) -> str:
 
 
 @router.post("/export_wtcs")
-async def export_results_wtcs(request: SearchRequest):
+def export_results_wtcs(request: SearchRequest):
     """
     导出 WTCS 搜索结果为 CSV（打包为 zip）
 

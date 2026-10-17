@@ -19,6 +19,9 @@ os.makedirs(JOBS_DIR, exist_ok=True)
 _lock = threading.Lock()
 _jobs_cache: Dict[str, dict] = {}
 
+# 服务重启后，旧进程里的后台任务已不可能继续执行
+RESTART_ERROR_MESSAGE = "服务重启，任务中断，请重新提交"
+
 
 def _job_path(job_id: str) -> str:
     return os.path.join(JOBS_DIR, f"{job_id}.json")
@@ -83,6 +86,31 @@ def get_job(job_id: str) -> Optional[dict]:
             pass
     with _lock:
         return _jobs_cache.get(job_id)
+
+
+def fail_interrupted_jobs() -> int:
+    """把所有 pending/running 任务标记为 failed（服务启动时调用）
+
+    Returns:
+        int: 被标记为 failed 的任务数量
+    """
+    count = 0
+    try:
+        filenames = os.listdir(JOBS_DIR)
+    except OSError:
+        return 0
+
+    for fname in filenames:
+        if not fname.endswith(".json"):
+            continue
+        job_id = fname[:-5]
+        job = get_job(job_id)
+        if not job:
+            continue
+        if job.get("status") in ("pending", "running"):
+            update_job(job_id, status="failed", error=RESTART_ERROR_MESSAGE)
+            count += 1
+    return count
 
 
 def list_jobs(limit: int = 50) -> list:

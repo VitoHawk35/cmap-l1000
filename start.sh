@@ -33,7 +33,7 @@ else
 fi
 
 echo "启动 cmap-api: $PROTOCOL://$HOST:$PORT"
-nohup gunicorn -w 4 -k uvicorn.workers.UvicornWorker \
+nohup gunicorn -w 1 --threads 8 -k uvicorn.workers.UvicornWorker \
   --bind "$HOST:$PORT" \
   --timeout 900 \
   --keep-alive 60 \
