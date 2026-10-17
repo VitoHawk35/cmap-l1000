@@ -73,7 +73,7 @@ def _results_to_csv(results: list, algorithm: str) -> str:
 
 
 @router.post("/export_data", response_model=ExportTokenResponse)
-async def export_data(request: ExportDataRequest):
+def export_data(request: ExportDataRequest):
     """
     提交导出数据，返回一次性下载 token
     """
@@ -94,7 +94,7 @@ async def export_data(request: ExportDataRequest):
 
 
 @router.get("/export_data/{token}")
-async def download_export(token: str):
+def download_export(token: str):
     """
     用 token 下载 ZIP 文件（一次性有效）
     """

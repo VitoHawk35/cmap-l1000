@@ -23,5 +23,5 @@ VOLUME ["/app/cmap_data"]
 # 暴露端口
 EXPOSE 8000
 
-# 启动命令（4工作进程，绑定0.0.0.0允许容器内访问）
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "300", "--keep-alive", "60", "app.main:app"]
+# 启动命令（单 worker + 8 线程，绑定0.0.0.0允许容器内访问）
+CMD ["gunicorn", "-w", "1", "--threads", "8", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "300", "--keep-alive", "60", "app.main:app"]

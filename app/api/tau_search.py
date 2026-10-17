@@ -195,7 +195,7 @@ def _run_tau_job(job_id: str, payload: dict):
 # ==================== 异步任务接口 ====================
 
 @router.post("/submit_tau", response_model=TauJobSubmitResponse)
-async def submit_tau(request: TauSearchRequest):
+def submit_tau(request: TauSearchRequest):
     """
     提交 Tau 搜索异步任务
     立即返回 job_id，后台执行计算
@@ -222,7 +222,7 @@ async def submit_tau(request: TauSearchRequest):
 
 
 @router.get("/tau_job/{job_id}", response_model=TauJobStatusResponse)
-async def get_tau_job(job_id: str):
+def get_tau_job(job_id: str):
     """
     查询 Tau 异步任务状态与结果
     """
@@ -243,8 +243,8 @@ async def get_tau_job(job_id: str):
 
 # ==================== 兼容旧接口（保留，但建议前端迁移到异步） ====================
 
-@router.post("/search_tau", response_model=TauSearchResponse)
-async def search_tau(request: TauSearchRequest):
+@router.post("/search_tau", response_model=TauSearchResponse, deprecated=True)
+def search_tau(request: TauSearchRequest):
     """
     Tau分数搜索（完整CMAP后处理流程）—— 同步版本，保留兼容
     计算时间较长（10-15分钟），建议前端使用 /submit_tau + /tau_job 异步接口

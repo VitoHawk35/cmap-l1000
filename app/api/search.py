@@ -55,7 +55,7 @@ def get_gene_to_idx() -> dict:
 
 
 @router.post("/search", response_model=SearchResponse)
-async def search_reversals(request: SearchRequest):
+def search_reversals(request: SearchRequest):
     """
     疾病特征逆转匹配（全库搜药）
 

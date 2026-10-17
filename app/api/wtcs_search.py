@@ -7,9 +7,11 @@ WTCS 算法疾病逆转匹配接口
 
 import asyncio
 import json
+import heapq
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from ..models.schemas import SearchRequest, SearchResponse, SearchResult
 from ..core.metadata_index import MetadataIndex
@@ -50,8 +52,34 @@ def get_gene_to_idx() -> dict:
     return _gene_to_idx
 
 
+def _process_wtcs_batch(scorer, data, start_idx, top_heap, bottom_heap, top_k):
+    """同步计算一批 WTCS 分数并更新 Top/Bottom 堆
+
+    抽成同步函数，供流式接口通过 run_in_threadpool 调用，
+    避免 CPU 密集计算阻塞事件循环。
+    """
+    batch_scores = scorer._compute_wtcs_batch(data)
+
+    for i, score in enumerate(batch_scores):
+        idx = start_idx + i
+
+        # Top 堆（最负的）
+        if len(top_heap) < top_k:
+            heapq.heappush(top_heap, (-score, idx))
+        elif score < -top_heap[0][0]:
+            heapq.heapreplace(top_heap, (-score, idx))
+
+        # Bottom 堆（最正的）
+        if len(bottom_heap) < top_k:
+            heapq.heappush(bottom_heap, (score, idx))
+        elif score > bottom_heap[0][0]:
+            heapq.heapreplace(bottom_heap, (score, idx))
+
+    return top_heap, bottom_heap
+
+
 @router.post("/search_wtcs", response_model=SearchResponse)
-async def search_reversals_wtcs(request: SearchRequest):
+def search_reversals_wtcs(request: SearchRequest):
     """
     WTCS 疾病特征逆转匹配（全库搜药）
 
@@ -214,7 +242,6 @@ async def search_reversals_wtcs_stream(request: SearchRequest):
             query_vector = np.zeros(N_GENES, dtype=np.float32)
 
             # 初始化堆
-            import heapq
             top_heap = []
             bottom_heap = []
             processed = 0
@@ -222,22 +249,11 @@ async def search_reversals_wtcs_stream(request: SearchRequest):
             current_batch = 0
 
             for start_idx, end_idx, data in batch_iterator:
-                batch_scores = scorer._compute_wtcs_batch(data)
-
-                for i, score in enumerate(batch_scores):
-                    idx = start_idx + i
-
-                    # Top 堆（最负的）
-                    if len(top_heap) < top_k:
-                        heapq.heappush(top_heap, (-score, idx))
-                    elif score < -top_heap[0][0]:
-                        heapq.heapreplace(top_heap, (-score, idx))
-
-                    # Bottom 堆（最正的）
-                    if len(bottom_heap) < top_k:
-                        heapq.heappush(bottom_heap, (score, idx))
-                    elif score > bottom_heap[0][0]:
-                        heapq.heapreplace(bottom_heap, (score, idx))
+                # CPU 密集的打分放到线程池，避免阻塞事件循环
+                top_heap, bottom_heap = await run_in_threadpool(
+                    _process_wtcs_batch,
+                    scorer, data, start_idx, top_heap, bottom_heap, top_k
+                )
 
                 processed += data.shape[1]
                 current_batch += 1

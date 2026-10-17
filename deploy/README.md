@@ -103,17 +103,17 @@ sudo systemctl restart nginx
 
 ### 工作进程数
 
-根据服务器CPU核心数调整：
+固定单 worker + 多线程（memmap 不共享；Tau 后台任务运行在 worker 线程中，多 worker 会被回收丢任务）：
 
 ```bash
 # Dockerfile或systemd中
--w 4  # 4个工作进程，建议 = CPU核心数
+-w 1 --threads 8
 ```
 
 ### 内存需求
 
 - **最低**: 4GB RAM（单进程）
-- **推荐**: 8GB RAM（4进程）
+- **推荐**: 8GB RAM（单进程 + 8 线程）
 - **磁盘**: 30GB（数据23GB + 系统）
 
 ### 超时设置

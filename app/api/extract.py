@@ -34,7 +34,7 @@ def get_matrix_store() -> MatrixStore:
 
 
 @router.post("/extract", response_model=ExtractResponse)
-async def extract_features(request: ExtractRequest):
+def extract_features(request: ExtractRequest):
     """
     根据药物、细胞系、浓度提取特征向量
 
