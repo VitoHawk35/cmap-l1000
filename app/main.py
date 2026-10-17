@@ -16,6 +16,12 @@ INDEX_HTML_PATH = os.path.join(
 ECHARTS_JS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "echarts.min.js"
 )
+BOOTSTRAP_CSS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bootstrap.min.css"
+)
+VUE_JS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vue.min.js"
+)
 
 from .api.extract import router as extract_router
 from .api.search import router as search_router
@@ -81,6 +87,18 @@ async def root():
 async def echarts_js():
     """本地化 ECharts（服务器在内网，不从 CDN 加载）"""
     return FileResponse(ECHARTS_JS_PATH, media_type="application/javascript")
+
+
+@app.get("/bootstrap.min.css", include_in_schema=False)
+async def bootstrap_css():
+    """本地化 Bootstrap CSS（D9 内网离线化）"""
+    return FileResponse(BOOTSTRAP_CSS_PATH, media_type="text/css")
+
+
+@app.get("/vue.min.js", include_in_schema=False)
+async def vue_js():
+    """本地化 Vue（D9 内网离线化）"""
+    return FileResponse(VUE_JS_PATH, media_type="application/javascript")
 
 
 @app.get("/health")
