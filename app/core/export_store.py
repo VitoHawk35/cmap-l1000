@@ -11,8 +11,9 @@ import time
 import threading
 from typing import Optional, Dict
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-EXPORT_DIR = os.path.join(PROJECT_ROOT, "temp", "exports")
+from ..config import TEMP_DIR
+
+EXPORT_DIR = os.path.join(TEMP_DIR, "exports")
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
 _DEFAULT_TTL = 300
