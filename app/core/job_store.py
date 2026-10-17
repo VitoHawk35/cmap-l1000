@@ -11,7 +11,9 @@ import time
 import threading
 from typing import Optional, Dict, Any
 
-JOBS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "temp", "jobs")
+from ..config import TEMP_DIR
+
+JOBS_DIR = os.path.join(TEMP_DIR, "jobs")
 os.makedirs(JOBS_DIR, exist_ok=True)
 
 _lock = threading.Lock()
