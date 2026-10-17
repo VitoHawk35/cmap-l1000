@@ -15,7 +15,8 @@
 | `app/core/post_processor.py` | 25, 85-86 | 导入 `DEFAULT_TOP_K`；`process()` 两个 k 参数默认值改为 `DEFAULT_TOP_K` |
 | `app/core/post_processor.py` | 123-124 | bottom 结果按 `ascending=False` 组装（最正在前）；top 仍升序 |
 | `app/core/post_processor.py` | 329-351 | `_to_results()` 新增 `ascending` 参数；排序改 `kind='mergesort'`（稳定排序，±100 并列可复现） |
-| `app/api/csv_parser.py` | 119-121 | 服务端校验 `10 <= top_n <= 150`，否则 422 |
+| `app/config.py` | 48-49 | 新增 `CSV_TOP_N_MAX = int(os.getenv("CMAP_CSV_TOP_N_MAX", "150"))`（D7 可配置，默认 150） |
+| `app/api/csv_parser.py` | 15, 119-123 | 服务端校验 `10 <= top_n <= CSV_TOP_N_MAX`，否则 422（默认上限 150） |
 | `index.html` | 321 | CSV 导入 Top N 输入框 `max="500"` → `max="150"` |
 | `index.html` | 690-696 | `currentSearchResults` bottom 分支：去掉无条件 `reverse()`，改为 `b.score - a.score` 降序后重排名次 |
 | `index.html` | 766-771 | 新增 `methods.clampTopK(v)`（10..5000，非法值回退 50） |
@@ -46,18 +47,19 @@
 
 ```
 ..............                                                           [100%]
-14 passed in 3.59s
+14 passed in 7.23s
 ```
 
 `pytest -q`（Python 3.11.7 venv，`D:\agent-workspace\venvs\cmap-c0-311`）：
 
 ```
 ..............                                                           [100%]
-14 passed, 1 warning in 4.73s
+14 passed, 1 warning in 6.03s
 ```
 
 - `python3.8 -m py_compile app/models/schemas.py app/api/tau_search.py app/core/post_processor.py app/api/csv_parser.py tests/test_topk.py` → 通过（无 PEP 585/604 语法）。
 - pydantic v1.10.12（系统环境）直接实例化校验：`SearchRequest` 默认 50，`TauSearchRequest` 默认 50/50，0 与 10000 均抛 `ValidationError`（即 HTTP 422），v1/v2 双兼容成立。
+- D7 可配置验证：`CSV_TOP_N_MAX` 默认 150；设置 `CMAP_CSV_TOP_N_MAX=500` 后读取为 500。
 - 完整输出：`D:\agent-workspace\deliveries\task-C1\pytest-py38.txt`、`pytest-py311.txt`、`compat-and-grep.txt`、`frontend-check.txt`。
 
 ## 验收逐条核对
@@ -74,16 +76,17 @@
   - 说明：本地无生产数据/运行中的后端，未做真实浏览器点击；结果条数由后端测试（20→20、默认→50）与上述静态断言共同覆盖。
 - [x] `grep -rn --exclude-dir=__pycache__ "150" app run.py index.html` 剩余命中：
   ```
-  app/api/csv_parser.py:119:    # 服务端校验：top_n 与前端输入框保持一致（10-150）
-  app/api/csv_parser.py:120:    if not 10 <= top_n <= 150:
-  app/api/csv_parser.py:121:        raise HTTPException(status_code=422, detail="top_n 必须在 10 到 150 之间")
+  app/api/csv_parser.py:119:    # 服务端校验：top_n 与前端输入框保持一致（默认 10-150，上限可配置）
+  app/config.py:48:# CSV 导入 topN 上限（🧑‍⚖️ D7：默认 150，可用 CMAP_CSV_TOP_N_MAX 调整）
+  app/config.py:49:CSV_TOP_N_MAX = int(os.getenv("CMAP_CSV_TOP_N_MAX", "150"))
   index.html:321:                                            max="150"
   ```
-  全部为 D7 的 CSV 导入 topN 上限 150（本轮按要求改为 150 后新增/修改的行），**已无与 `top_k/bottom_k` 相关的 150 命中**。
+  全部为 D7 的 CSV 导入 topN 上限 150（本轮按要求改为 150 后新增/修改的配置、注释与输入框），**已无与 `top_k/bottom_k` 相关的 150 命中**。
 
 ## 待人工确认（🧑‍⚖️）
 
-- **D7：CSV 导入 topN 上限已按任务默认建议从 500 改为 150**（前端输入框 `max=150` + 服务端 `10..150` 校验，越界返回 422）。这与 CLUE 规范一致，但属于用户可见行为变化，请确认是否接受；如需保留 500，只需改回 `index.html:321` 的 `max` 与 `csv_parser.py:120` 的上界。
+- **D7：CSV 导入 topN 上限已按任务默认建议从 500 改为 150**（前端输入框 `max=150` + 服务端 `10..150` 校验，越界返回 422）。这与 CLUE 规范一致，但属于用户可见行为变化，请确认是否接受。
+  - 按全局规则 ⑥ 已做成可配置：服务端上限由 `CMAP_CSV_TOP_N_MAX` 环境变量控制（默认 150），无需改代码即可回退/调整；前端输入框 `max` 仍为固定 150，如需变化需同步改 `index.html:321`。
 
 ## 发现但未处理
 
