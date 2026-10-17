@@ -5,7 +5,9 @@ Pydantic 模型定义
 """
 
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from ..config import DEFAULT_TOP_K
 
 
 # ============ 接口1: 特征提取 ============
@@ -32,7 +34,7 @@ class SearchRequest(BaseModel):
     """疾病逆转匹配请求"""
     up_genes: List[int]          # 上调基因 Entrez ID 列表
     down_genes: List[int]        # 下调基因 Entrez ID 列表
-    top_k: int = 50              # 返回 Top-K 结果
+    top_k: int = Field(DEFAULT_TOP_K, ge=1, le=5000)  # 返回 Top-K 结果
 
 
 class SearchResult(BaseModel):
@@ -61,8 +63,8 @@ class TauSearchRequest(BaseModel):
     """Tau分数搜索请求（完整后处理流程）"""
     up_genes: List[int]          # 上调基因 Entrez ID 列表
     down_genes: List[int]        # 下调基因 Entrez ID 列表
-    top_k: int = 150             # 返回 Top-K 结果
-    bottom_k: int = 150          # 返回 Bottom-K 结果
+    top_k: int = Field(DEFAULT_TOP_K, ge=1, le=5000)     # 返回 Top-K 结果
+    bottom_k: int = Field(DEFAULT_TOP_K, ge=1, le=5000)  # 返回 Bottom-K 结果
 
 
 class TauSearchResult(BaseModel):

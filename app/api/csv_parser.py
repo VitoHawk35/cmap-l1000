@@ -116,6 +116,10 @@ async def parse_csv(
             "warning": "..." (可选)
         }
     """
+    # 服务端校验：top_n 与前端输入框保持一致（10-150）
+    if not 10 <= top_n <= 150:
+        raise HTTPException(status_code=422, detail="top_n 必须在 10 到 150 之间")
+
     filename = file.filename.lower()
     is_xlsx = filename.endswith('.xlsx') or filename.endswith('.xls')
     is_csv = filename.endswith('.csv')

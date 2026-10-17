@@ -318,7 +318,7 @@
                                             v-model.number="csvForm.topN"
                                             type="number"
                                             min="10"
-                                            max="500"
+                                            max="150"
                                             class="form-control">
                                     </div>
                                 </div>
@@ -690,9 +690,9 @@
                     if (this.searchViewMode === 'top') {
                         return this.searchTopResults;
                     }
-                    // bottom 倒序展示：最正的排在最上面，重新计算 rank
-                    const reversed = [...this.searchBottomResults].reverse();
-                    return reversed.map((r, i) => ({ ...r, rank: i + 1 }));
+                    // bottom：最正（最相似）在前，重新计算 rank
+                    const sorted = [...this.searchBottomResults].sort((a, b) => b.score - a.score);
+                    return sorted.map((r, i) => ({ ...r, rank: i + 1 }));
                 }
             },
             watch: {
@@ -763,6 +763,12 @@
                 }
             },
             methods: {
+                // 结果数量统一收敛到 10-5000（与输入框 min/max 一致），非法值回退 50
+                clampTopK(v) {
+                    const n = parseInt(v, 10);
+                    return Number.isFinite(n) ? Math.min(5000, Math.max(10, n)) : 50;
+                },
+
                 // CSV / XLSX 文件处理
                 handleCsvFileSelect(event) {
                     const file = event.target.files[0];
@@ -920,7 +926,7 @@
                         const res = await fetch(`${this.apiBaseUrl}/api/v1/search`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ up_genes: up, down_genes: down, top_k: this.searchForm.topK })
+                            body: JSON.stringify({ up_genes: up, down_genes: down, top_k: this.clampTopK(this.searchForm.topK) })
                         });
                         if (!res.ok) throw new Error((await res.json()).detail || '搜索失败');
                         const data = await res.json();
@@ -939,7 +945,7 @@
                     this.searchProgress = { show: true, percent: 0, current: 0, total: 473647, batch: 0, totalBatches: 95 };
 
                     return new Promise((resolve, reject) => {
-                        const payload = JSON.stringify({ up_genes: up, down_genes: down, top_k: this.searchForm.topK });
+                        const payload = JSON.stringify({ up_genes: up, down_genes: down, top_k: this.clampTopK(this.searchForm.topK) });
 
                         fetch(`${this.apiBaseUrl}/api/v1/search_wtcs_stream`, {
                             method: 'POST',
@@ -1049,8 +1055,8 @@
                             body: JSON.stringify({
                                 up_genes: up,
                                 down_genes: down,
-                                top_k: 150,
-                                bottom_k: 150
+                                top_k: this.clampTopK(this.searchForm.topK),
+                                bottom_k: this.clampTopK(this.searchForm.topK)
                             })
                         });
 
