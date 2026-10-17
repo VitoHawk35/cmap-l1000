@@ -4,27 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>基于CMAP的药物发现智能体</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- D9（🧑‍⚖️ 待确认）：内网离线化，默认加载本地 Bootstrap；断网/部署异常时可回退 CDN（见注释行） -->
+    <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"> -->
+    <link href="bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary: #0891b2;
-            --bg: #0f172a;
-            --card: #1e293b;
-            --input: #334155;
-            --text: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --border: #334155;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
+            --primary: #3ecf8e;
+            --bg: #ffffff;
+            --card: #ffffff;
+            --input: #ffffff;
+            --text: #171717;
+            --text-secondary: #707070;
+            --border: #dfdfdf;
+            --success: #11845b;
+            --warning: #a16207;
+            --danger: #e2005a;
         }
 
-        * { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
 
         body {
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
+            background-image: none;
         }
 
         .header {
@@ -35,8 +38,8 @@
 
         .logo {
             font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--primary);
+            font-weight: 500;
+            color: var(--text);
         }
 
         .nav-tabs {
@@ -53,29 +56,30 @@
         }
 
         .nav-tabs .nav-link:hover {
-            background: rgba(8, 145, 178, 0.1);
-            border-color: var(--primary);
+            background: #f5f5f5;
+            border-color: var(--border);
             color: var(--text);
         }
 
         .nav-tabs .nav-link.active {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: white;
+            background: #171717;
+            border-color: #171717;
+            color: #ffffff;
         }
 
         .card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 12px;
         }
 
         .card-header {
-            background: rgba(8, 145, 178, 0.1);
+            background: #f7f7f7;
             border-bottom: 1px solid var(--border);
             padding: 0.75rem 1rem;
-            color: var(--primary);
+            color: var(--text);
             font-weight: 500;
+            border-radius: 12px 12px 0 0;
         }
 
         .form-control {
@@ -88,7 +92,7 @@
         .form-control:focus {
             background: var(--input);
             border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.2);
+            box-shadow: 0 0 0 2px rgba(62, 207, 142, 0.25);
             color: var(--text);
         }
 
@@ -105,33 +109,40 @@
         .btn-primary {
             background: var(--primary);
             border: none;
+            border-radius: 6px;
+            color: #171717;
             padding: 0.625rem 1.25rem;
         }
 
-        .btn-primary:hover { background: #0e7490; }
+        .btn-primary:hover, .btn-primary:focus { background: #24b47e; color: #171717; }
 
-        .btn-primary:disabled {
+        .btn-primary:disabled, .btn-primary.disabled {
+            background: var(--primary);
+            color: #171717;
             opacity: 0.5;
             cursor: not-allowed;
         }
 
         .btn-outline {
             background: transparent;
-            border: 1px solid var(--primary);
-            color: var(--primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
             padding: 0.375rem 0.75rem;
             font-size: 0.875rem;
         }
 
         .btn-outline:hover {
-            background: rgba(8, 145, 178, 0.1);
+            background: #f5f5f5;
+            border-color: #c7c7c7;
+            color: var(--text);
         }
 
         .spinner {
             width: 16px;
             height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: white;
+            border: 2px solid rgba(23,23,23,0.25);
+            border-top-color: #171717;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             display: inline-block;
@@ -144,10 +155,11 @@
             color: var(--text);
             font-size: 0.875rem;
             margin: 0;
+            font-variant-numeric: tabular-nums;
         }
 
         .table thead th {
-            background: rgba(8, 145, 178, 0.05);
+            background: #f7f7f7;
             border-bottom: 1px solid var(--border);
             color: var(--text-secondary);
             font-weight: 500;
@@ -160,17 +172,19 @@
             vertical-align: middle;
         }
 
-        .table tbody tr:hover { background: rgba(8, 145, 178, 0.03); }
+        .table tbody tr:hover { background: #fafafa; }
 
         .score-text {
             font-weight: 500;
             display: flex;
             align-items: center;
             gap: 0.25rem;
+            font-variant-numeric: tabular-nums;
         }
 
-        .score-neg { color: var(--success); }
-        .score-pos { color: var(--danger); }
+        /* 负分 = 逆转 = 靛蓝；正分 = 相似 = 品红（不用绿/红表达好坏） */
+        .score-neg { color: #054cff; }
+        .score-pos { color: #e2005a; }
 
         .rank {
             width: 24px;
@@ -180,13 +194,14 @@
             align-items: center;
             justify-content: center;
             font-size: 0.75rem;
-            font-weight: 600;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
         }
 
-        .rank-1 { background: var(--primary); color: white; }
-        .rank-2 { background: var(--text-secondary); color: var(--bg); }
-        .rank-3 { background: #64748b; color: white; }
-        .rank-other { background: var(--input); color: var(--text-secondary); }
+        .rank-1 { background: #171717; color: #fff; }
+        .rank-2 { background: #707070; color: #fff; }
+        .rank-3 { background: #b2b2b2; color: #171717; }
+        .rank-other { background: #f5f5f5; color: #707070; }
 
         .guide-text {
             color: var(--text-secondary);
@@ -198,31 +213,34 @@
             color: var(--text-secondary);
             font-size: 0.75rem;
             margin-top: 0.25rem;
+            font-variant-numeric: tabular-nums;
         }
 
         .gene-tag {
             display: inline-block;
-            background: rgba(8, 145, 178, 0.15);
+            background: #f5f5f5;
             border-radius: 3px;
             padding: 0.125rem 0.5rem;
             margin: 0.125rem;
             font-size: 0.75rem;
-            color: var(--primary);
+            color: var(--text);
         }
 
         .result-info {
-            background: rgba(8, 145, 178, 0.05);
+            background: #f7f7f7;
             border-radius: 6px;
             padding: 1rem;
         }
 
         .vector-preview {
-            background: var(--input);
+            background: #f7f7f7;
+            border: 1px solid var(--border);
             border-radius: 4px;
             padding: 0.75rem;
             font-family: monospace;
             font-size: 0.8125rem;
             color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
         }
 
         .empty-state {
@@ -233,10 +251,10 @@
         }
 
         .alert-error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            background: rgba(226, 0, 90, 0.06);
+            border: 1px solid rgba(226, 0, 90, 0.3);
             border-radius: 4px;
-            color: #fca5a5;
+            color: #b00047;
             padding: 0.625rem 0.875rem;
             font-size: 0.875rem;
             margin-top: 0.75rem;
@@ -246,6 +264,7 @@
             color: var(--text-secondary);
             font-size: 0.75rem;
             margin-top: 0.75rem;
+            font-variant-numeric: tabular-nums;
         }
     </style>
 </head>
@@ -293,9 +312,9 @@
                                         class="form-control">
                                 </div>
 
-                                <div class="mb-3" style="background:rgba(8,145,178,0.05);border-radius:6px;padding:0.75rem;">
+                                <div class="mb-3" style="background:#f7f7f7;border-radius:6px;padding:0.75rem;">
                                     <div style="color:var(--text-secondary);font-size:0.75rem;margin-bottom:0.25rem;">
-                                        <strong style="color:var(--primary);">文件必须包含以下列名（至少三列）：</strong>
+                                        <strong style="color:var(--text);font-weight:500;">文件必须包含以下列名（至少三列）：</strong>
                                     </div>
                                     <div style="color:var(--text-secondary);font-size:0.7rem;line-height:1.6;">
                                         <span class="gene-tag">gene / Gene_Symbol</span>
@@ -341,19 +360,19 @@
 
                                 <!-- 无效基因展示 -->
                                 <div v-if="csvMissingUp.length > 0 || csvMissingDown.length > 0" class="mt-3" style="border:1px solid var(--border);border-radius:6px;padding:0.75rem;background:rgba(245,158,11,0.05);">
-                                    <div style="color:var(--warning);font-size:0.75rem;font-weight:600;margin-bottom:0.5rem;">
+                                    <div style="color:var(--warning);font-size:0.75rem;font-weight:500;margin-bottom:0.5rem;">
                                         ⚠ 以下基因无法识别（共 {{ csvMissingUp.length + csvMissingDown.length }} 个）
                                     </div>
                                     <div v-if="csvMissingUp.length > 0" style="margin-bottom:0.5rem;">
                                         <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.25rem;">上调基因中未识别（{{ csvMissingUp.length }}个）：</div>
                                         <div style="display:flex;flex-wrap:wrap;gap:0.25rem;">
-                                            <span v-for="g in csvMissingUp" :key="g" class="gene-tag" style="background:rgba(239,68,68,0.15);color:#fca5a5;">{{ g }}</span>
+                                            <span v-for="g in csvMissingUp" :key="g" class="gene-tag" style="background:rgba(226,0,90,0.08);color:#b00047;">{{ g }}</span>
                                         </div>
                                     </div>
                                     <div v-if="csvMissingDown.length > 0">
                                         <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.25rem;">下调基因中未识别（{{ csvMissingDown.length }}个）：</div>
                                         <div style="display:flex;flex-wrap:wrap;gap:0.25rem;">
-                                            <span v-for="g in csvMissingDown" :key="g" class="gene-tag" style="background:rgba(239,68,68,0.15);color:#fca5a5;">{{ g }}</span>
+                                            <span v-for="g in csvMissingDown" :key="g" class="gene-tag" style="background:rgba(226,0,90,0.08);color:#b00047;">{{ g }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -420,8 +439,8 @@
 
                                 <!-- 进度条 -->
                                 <div v-if="searchProgress.show" class="mt-3">
-                                    <div class="progress" style="height: 8px; background: var(--input); border-radius: 4px; overflow: hidden;">
-                                        <div class="progress-bar" :style="{width: searchProgress.percent + '%', background: 'var(--primary)', height: '100%', transition: 'width 0.3s ease'}"></div>
+                                    <div class="progress" style="height: 8px; background: #f5f5f5; border-radius: 4px; overflow: hidden;">
+                                        <div class="progress-bar" :style="{width: searchProgress.percent + '%', background: '#171717', height: '100%', transition: 'width 0.3s ease'}"></div>
                                     </div>
                                     <div class="count-text mt-1" style="display: flex; justify-content: space-between;">
                                         <span>
@@ -464,6 +483,9 @@
                                 </div>
                             </div>
                             <div class="card-body p-2">
+                                <div style="color:#707070;font-size:0.75rem;padding:0.25rem 0.5rem 0;">
+                                    解读：药物按得分降序排列，零线以上（品红）为与疾病特征相似的药物，零线以下（靛蓝）为可逆转疾病特征的候选药物；越远离零线信号越强。
+                                </div>
                                 <div id="scoreChart" style="width:100%;height:360px;"></div>
                                 <div v-if="chartLocateError" style="color:var(--danger);font-size:0.75rem;padding:0.25rem 0.5rem 0;">
                                     {{ chartLocateError }}
@@ -475,13 +497,13 @@
                                 <div style="display:flex;gap:1rem;align-items:center;">
                                     <span
                                         @click="searchViewMode = 'top'"
-                                        :style="{cursor:'pointer',color:searchViewMode==='top'?'var(--primary)':'var(--text-secondary)'}">
+                                        :style="{cursor:'pointer',color:searchViewMode==='top'?'#171717':'#707070'}">
                                         Top({{ searchTopResults.length }})
                                     </span>
                                     <span style="color:var(--border)">|</span>
                                     <span
                                         @click="searchViewMode = 'bottom'"
-                                        :style="{cursor:'pointer',color:searchViewMode==='bottom'?'var(--primary)':'var(--text-secondary)'}">
+                                        :style="{cursor:'pointer',color:searchViewMode==='bottom'?'#171717':'#707070'}">
                                         Bottom({{ searchBottomResults.length }})
                                     </span>
                                 </div>
@@ -520,7 +542,7 @@
                                                 </span>
                                             </td>
                                             <td>
-                                                <span v-if="result.is_touchstone" style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;">是</span>
+                                                <span v-if="result.is_touchstone" style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:#f5f5f5;color:#171717;">是</span>
                                                 <span v-else style="font-size:0.7rem;color:var(--text-secondary);">-</span>
                                             </td>
                                             <td>
@@ -567,7 +589,7 @@
 
                                 <div class="row mb-3">
                                     <div class="col-6">
-                                        <label class="form-label">细胞系���选填）</label>
+                                        <label class="form-label">细胞系（选填）</label>
                                         <input v-model="extractForm.cellLine" type="text" class="form-control" placeholder="A375">
                                     </div>
                                     <div class="col-6">
@@ -636,9 +658,42 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <!-- D9（🧑‍⚖️ 待确认）：Vue 本地离线化；CDN 备选保留在注释中 -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script> -->
+    <script src="vue.min.js"></script>
     <script src="echarts.min.js"></script>
     <script>
+        // ============ ECharts 主题 supabase-med（报告 3.6） ============
+        // 下调/逆转 ← 0 → 上调/加重
+        const DIV_COLORS = ['#054cff', '#7da0fa', '#f5f5f5', '#eb7aa7', '#e2005a'];
+        // 显著性：浅 → 深
+        const SEQ_COLORS = ['#f5f0fb', '#eddbf9', '#b9a6e8', '#644fc1', '#3b2a85'];
+        const supabaseMedTheme = {
+            color: ['#054cff', '#e2005a', '#707070'],
+            backgroundColor: 'transparent',
+            textStyle: { fontFamily: '"Inter","PingFang SC","Microsoft YaHei",sans-serif', color: '#171717', fontSize: 12 },
+            title: { left: 0, textStyle: { color: '#171717', fontSize: 16, fontWeight: 500 }, subtextStyle: { color: '#707070', fontSize: 13 } },
+            grid: { left: 8, right: 16, top: 40, bottom: 32, containLabel: true },
+            categoryAxis: { axisLine: { lineStyle: { color: '#dfdfdf' } }, axisTick: { show: false },
+                            axisLabel: { color: '#707070' }, splitLine: { show: false } },
+            valueAxis: { axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#707070' },
+                         splitLine: { lineStyle: { color: '#ededed', width: 1 } }, nameTextStyle: { color: '#707070' } },
+            tooltip: { backgroundColor: '#ffffff', borderColor: '#dfdfdf', borderWidth: 1, padding: [8, 12],
+                       textStyle: { color: '#171717', fontSize: 12 },
+                       extraCssText: 'border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.08);font-variant-numeric:tabular-nums;' },
+            legend: { icon: 'roundRect', itemWidth: 10, itemHeight: 10, itemGap: 16, textStyle: { color: '#707070' } },
+            line: { symbol: 'none', lineStyle: { width: 1.5 } },
+            bar: { itemStyle: { borderRadius: [2, 2, 0, 0] }, barMaxWidth: 24 },
+            scatter: { symbolSize: 6, itemStyle: { opacity: 0.9 } },
+            visualMap: { inRange: { color: DIV_COLORS }, textStyle: { color: '#707070' }, itemWidth: 10, itemHeight: 120 },
+            dataZoom: { borderColor: '#ededed', fillerColor: 'rgba(23,23,23,0.06)', handleStyle: { color: '#ffffff', borderColor: '#c7c7c7' },
+                        textStyle: { color: '#707070' }, dataBackground: { lineStyle: { color: '#c7c7c7' }, areaStyle: { color: '#ededed' } } },
+            markLine: { lineStyle: { color: '#171717', type: 'dashed', width: 1 }, label: { color: '#171717', fontSize: 11 } }
+        };
+        if (typeof echarts !== 'undefined') {
+            echarts.registerTheme('supabase-med', supabaseMedTheme);
+        }
+
         new Vue({
             el: '#app',
             data: {
@@ -721,6 +776,12 @@
                 }
             },
             mounted() {
+                // resize 监听只注册一次，避免每次重绘图表都新增监听（泄漏）
+                this._onResize = () => {
+                    if (this._scoreChart) this._scoreChart.resize();
+                };
+                window.addEventListener('resize', this._onResize);
+
                 // 1. 恢复搜索表单数据
                 const savedForm = localStorage.getItem('cmap_search_form_v2');
                 if (savedForm) {
@@ -759,6 +820,14 @@
             beforeDestroy() {
                 if (this.tauPollTimer) {
                     clearTimeout(this.tauPollTimer);
+                }
+                if (this._onResize) {
+                    window.removeEventListener('resize', this._onResize);
+                    this._onResize = null;
+                }
+                if (this._scoreChart) {
+                    this._scoreChart.dispose();
+                    this._scoreChart = null;
                 }
             },
             methods: {
@@ -1200,10 +1269,7 @@
                         this._scoreChart = null;
                     }
                     if (!this._scoreChart) {
-                        this._scoreChart = echarts.init(el);
-                        window.addEventListener('resize', () => {
-                            if (this._scoreChart) this._scoreChart.resize();
-                        });
+                        this._scoreChart = echarts.init(el, 'supabase-med');
                         this._scoreChart.on('click', p => {
                             if (p.seriesIndex === 1) this.highlightChartPoint(p.data[2]);
                         });
@@ -1223,14 +1289,11 @@
                         tooltip: {
                             trigger: 'item',
                             triggerOn: 'mousemove|click',
-                            backgroundColor: 'rgba(15,23,42,0.92)',
-                            borderWidth: 0,
-                            textStyle: { color: '#e2e8f0', fontSize: 12 },
                             formatter(p) {
                                 const r = self._chartData[p.data[2]];
                                 if (!r) return '';
                                 const dir = r.score < 0 ? '↓ 逆转' : '↑ 匹配';
-                                let html = `<div style="font-weight:600;margin-bottom:4px;">${r.drug}</div>`;
+                                let html = `<div style="font-weight:500;margin-bottom:4px;">${r.drug}</div>`;
                                 html += `<div>得分：${r.score.toFixed(4)}（${dir}）</div>`;
                                 if (r.best_wtcs !== undefined && r.best_wtcs !== null) {
                                     html += `<div>WTCS：${r.best_wtcs.toFixed(4)}</div>`;
@@ -1247,23 +1310,18 @@
                             name: '药物（按得分降序）',
                             nameLocation: 'middle',
                             nameGap: 30,
-                            nameTextStyle: { color: '#94a3b8' },
                             min: 0,
                             max: data.length - 1,
-                            axisLabel: { color: '#94a3b8' },
                             splitLine: { show: false }
                         },
                         yAxis: {
                             type: 'value',
                             name: 'Score',
-                            nameTextStyle: { color: '#94a3b8' },
-                            axisLabel: { color: '#94a3b8' },
-                            splitLine: { lineStyle: { color: 'rgba(148,163,184,0.15)' } }
+                            splitLine: { lineStyle: { color: '#ededed' } }
                         },
                         dataZoom: [
                             { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
-                            { type: 'slider', xAxisIndex: 0, height: 18, bottom: 8, filterMode: 'none',
-                              borderColor: 'rgba(148,163,184,0.3)', textStyle: { color: '#94a3b8' } }
+                            { type: 'slider', xAxisIndex: 0, height: 18, bottom: 8, filterMode: 'none' }
                         ],
                         series: [
                             {
@@ -1272,13 +1330,12 @@
                                 data: data.map((r, i) => [i, r.score, i]),
                                 showSymbol: false,
                                 silent: true,
-                                lineStyle: { color: 'rgba(148,163,184,0.45)', width: 1.5 },
+                                lineStyle: { color: '#c7c7c7', width: 1.5 },
                                 z: 1,
                                 markLine: {
                                     silent: true,
                                     symbol: 'none',
                                     label: { show: false },
-                                    lineStyle: { color: 'rgba(148,163,184,0.5)', type: 'dashed' },
                                     data: [{ yAxis: 0 }]
                                 }
                             },
@@ -1288,12 +1345,13 @@
                                 data: data.map((r, i) => [i, r.score, i]),
                                 symbolSize: 9,
                                 itemStyle: {
-                                    color: p => p.data[1] < 0 ? '#34d399' : '#f87171',
+                                    // 负分（逆转）= 靛蓝；正分（相似）= 品红
+                                    color: p => p.data[1] < 0 ? '#054cff' : '#e2005a',
                                     opacity: 0.9
                                 },
                                 emphasis: {
                                     scale: 1.6,
-                                    itemStyle: { opacity: 1, shadowBlur: 8, shadowColor: 'rgba(255,255,255,0.35)' }
+                                    itemStyle: { opacity: 1 }
                                 },
                                 z: 3
                             },
@@ -1303,7 +1361,6 @@
                                 data: [],
                                 symbolSize: 16,
                                 rippleEffect: { brushType: 'stroke', scale: 3 },
-                                itemStyle: { color: '#fbbf24' },
                                 silent: true,
                                 z: 10
                             }
