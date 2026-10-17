@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from starlette.concurrency import run_in_threadpool
 
-from ..config import GENE_INFO_PATH
+from ..config import GENE_INFO_PATH, CSV_TOP_N_MAX
 
 router = APIRouter()
 
@@ -265,6 +265,14 @@ async def parse_csv(
             "warning": "..." (可选)
         }
     """
+    # 服务端校验：top_n 与前端输入框保持一致（默认 10-150，上限可配置）
+    # 必须在 run_in_threadpool 之前执行，越界返回 422
+    if not 10 <= top_n <= CSV_TOP_N_MAX:
+        raise HTTPException(
+            status_code=422,
+            detail="top_n 必须在 10 到 {} 之间".format(CSV_TOP_N_MAX)
+        )
+
     filename = (file.filename or "").lower()
     is_xlsx = filename.endswith('.xlsx') or filename.endswith('.xls')
     is_csv = filename.endswith('.csv')

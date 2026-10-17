@@ -25,7 +25,7 @@ from ..core.matrix_store import MatrixStore
 from ..core.post_processor import CMAPPostProcessor
 from ..core.job_store import create_job, get_job, update_job
 from ..scoring.wtcs_scorer import WTCSScorer
-from ..config import N_GENES, N_SIGS, ROW_NAMES_PATH
+from ..config import N_GENES, N_SIGS, ROW_NAMES_PATH, DEFAULT_TOP_K
 import pandas as pd
 
 router = APIRouter()
@@ -84,8 +84,8 @@ def _run_tau_job(job_id: str, payload: dict):
 
         up_genes = payload["up_genes"]
         down_genes = payload["down_genes"]
-        top_k = min(payload.get("top_k", 150), N_SIGS // 2)
-        bottom_k = min(payload.get("bottom_k", 150), N_SIGS // 2)
+        top_k = min(payload.get("top_k", DEFAULT_TOP_K), N_SIGS // 2)
+        bottom_k = min(payload.get("bottom_k", DEFAULT_TOP_K), N_SIGS // 2)
 
         # 1. 基因ID映射
         up_indices = []

@@ -44,3 +44,6 @@ API_PORT = int(os.getenv("API_PORT", "8000"))
 # ============ 搜索配置 ============
 DEFAULT_TOP_K = 50
 CHUNK_SIZE_FOR_BATCH = 10000  # 批量处理时的分块大小
+
+# CSV 导入 topN 上限（🧑‍⚖️ D7：默认 150，可用 CMAP_CSV_TOP_N_MAX 调整）
+CSV_TOP_N_MAX = int(os.getenv("CMAP_CSV_TOP_N_MAX", "150"))

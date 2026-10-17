@@ -22,7 +22,7 @@ from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 from scipy import stats
 
-from ..config import SIG_INFO_PATH, PERT_INFO_PATH
+from ..config import SIG_INFO_PATH, PERT_INFO_PATH, DEFAULT_TOP_K
 
 
 @dataclass
@@ -82,8 +82,8 @@ class CMAPPostProcessor:
         self,
         sig_ids: List[str],
         scores: List[float],
-        return_top_k: int = 150,
-        return_bottom_k: int = 150
+        return_top_k: int = DEFAULT_TOP_K,
+        return_bottom_k: int = DEFAULT_TOP_K
     ) -> Tuple[List[PostProcessedResult], List[PostProcessedResult]]:
         """
         执行完整的后处理流程
@@ -120,8 +120,8 @@ class CMAPPostProcessor:
         bottom_df = df_aggregated.nlargest(return_bottom_k, 'tau_score')
 
         # 转换为结果对象
-        top_results = self._to_results(top_df, start_rank=1)
-        bottom_results = self._to_results(bottom_df, start_rank=1)
+        top_results = self._to_results(top_df, start_rank=1, ascending=True)
+        bottom_results = self._to_results(bottom_df, start_rank=1, ascending=False)
 
         return top_results, bottom_results
 
@@ -329,13 +329,22 @@ class CMAPPostProcessor:
     def _to_results(
         self,
         df: pd.DataFrame,
-        start_rank: int = 1
+        start_rank: int = 1,
+        ascending: bool = True
     ) -> List[PostProcessedResult]:
-        """将DataFrame转换为PostProcessedResult列表"""
+        """将DataFrame转换为PostProcessedResult列表
+
+        Args:
+            df: 已截取的 top/bottom DataFrame
+            start_rank: 起始名次
+            ascending: True 用于 top（tau 最负在前）；False 用于 bottom（tau 最正在前）
+        """
         results = []
 
-        # 按tau_score升序排序（负的在前面是逆转最强）
-        df_sorted = df.sort_values('tau_score', ascending=True)
+        # top：tau_score 升序（负的在前面是逆转最强）
+        # bottom：tau_score 降序（最正在前面，与疾病最相似）
+        # kind='mergesort' 为稳定排序，保证 ±100 饱和并列时的名次可复现
+        df_sorted = df.sort_values('tau_score', ascending=ascending, kind='mergesort')
 
         for rank, (_, row) in enumerate(df_sorted.iterrows(), start_rank):
             results.append(PostProcessedResult(
