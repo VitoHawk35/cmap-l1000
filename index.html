@@ -525,6 +525,7 @@
                                             <th>Touchstone</th>
                                             <th>得分</th>
                                             <th v-if="searchForm.algorithm === 'tau'">WTCS得分</th>
+                                            <th v-if="searchForm.algorithm === 'tau'" title="与 1 万个同样大小的随机基因集比较，FDR 越小，说明这个逆转越不可能是偶然">FDR</th>
                                             <th>ID</th>
                                         </tr>
                                     </thead>
@@ -553,6 +554,13 @@
                                             <td v-if="searchForm.algorithm === 'tau'">
                                                 <span v-if="result.best_wtcs !== undefined && result.best_wtcs !== null" class="score-text" :class="result.best_wtcs < 0 ? 'score-neg' : 'score-pos'">
                                                     {{ result.best_wtcs < 0 ? '↓' : '↑' }} {{ result.best_wtcs.toFixed(4) }}
+                                                </span>
+                                                <span v-else style="color:var(--text-secondary);">-</span>
+                                            </td>
+                                            <td v-if="searchForm.algorithm === 'tau'">
+                                                <span v-if="result.fdr !== undefined && result.fdr !== null"
+                                                      :style="{ fontWeight: result.fdr < 0.05 ? '700' : '400', color: result.fdr > 0.25 ? 'var(--text-secondary)' : '' }">
+                                                    {{ result.fdr.toFixed(4) }}
                                                 </span>
                                                 <span v-else style="color:var(--text-secondary);">-</span>
                                             </td>
@@ -1218,7 +1226,8 @@
                         cell_count: r.cell_count,
                         summary_ncs: r.summary_ncs,
                         best_wtcs: r.best_wtcs,
-                        is_touchstone: r.is_touchstone
+                        is_touchstone: r.is_touchstone,
+                        fdr: r.fdr
                     }));
 
                     this.searchBottomResults = data.bottom_results.map(r => ({
@@ -1232,7 +1241,8 @@
                         cell_count: r.cell_count,
                         summary_ncs: r.summary_ncs,
                         best_wtcs: r.best_wtcs,
-                        is_touchstone: r.is_touchstone
+                        is_touchstone: r.is_touchstone,
+                        fdr: r.fdr
                     }));
 
                     this.searchStats = { upCount: data.query_up_count, downCount: data.query_down_count };

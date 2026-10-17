@@ -49,3 +49,11 @@ def client(synthetic_data):
     from app.main import app
 
     return TestClient(app)
+
+
+@pytest.fixture(scope="session")
+def drug_median_data(synthetic_data):
+    """用 build_drug_median.py 从合成数据集生成药物中位数矩阵（C3 集成测试用）。"""
+    from scripts.build_drug_median import build_drug_median
+
+    return build_drug_median(synthetic_data["data_dir"])

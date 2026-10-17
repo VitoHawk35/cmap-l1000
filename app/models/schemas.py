@@ -79,6 +79,9 @@ class TauSearchResult(BaseModel):
     best_cell_id: str            # 产生极值的细胞系
     best_dose: str               # 产生极值的剂量
     is_touchstone: bool          # 是否Touchstone
+    p_value: Optional[float] = None   # 随机签名 null 的单侧 p 值（越小越逆转）
+    fdr: Optional[float] = None       # BH-FDR（跨全部药物校正）
+    null_z: Optional[float] = None    # (xsum − null 均值)/null sd；负 = 更逆转
 
 
 class TauSearchResponse(BaseModel):
@@ -87,6 +90,7 @@ class TauSearchResponse(BaseModel):
     query_down_count: int        # 查询中下调基因数量
     top_results: List[TauSearchResult]     # Top-K 结果（tau最负，逆转最强）
     bottom_results: List[TauSearchResult]  # Bottom-K 结果（tau最正，与疾病最相似）
+    null_calibration: Optional[str] = None  # ok / insufficient_landmark_genes / unavailable
 
 
 # ============ 接口4: Tau异步任务 ============

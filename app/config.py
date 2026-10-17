@@ -24,6 +24,25 @@ SIG_INFO_PATH = os.path.join(DATA_DIR, "GSE92742_Broad_LINCS_sig_info.txt.gz")
 GENE_INFO_PATH = os.path.join(DATA_DIR, "GSE92742_Broad_LINCS_gene_info.txt.gz")
 PERT_INFO_PATH = os.path.join(DATA_DIR, "GSE92742_Broad_LINCS_pert_info.txt.gz")
 
+# ============ 药物中位数矩阵（C3 方案 B：查询内随机签名 null） ============
+# 由 scripts/build_drug_median.py 生成；978 × n_drug，float32。
+# 矩阵只放在 CMAP_DATA_DIR 下，不进 git。
+DRUG_MEDIAN_MATRIX_PATH = os.getenv(
+    "CMAP_DRUG_MEDIAN_MATRIX", os.path.join(DATA_DIR, "drug_median_lm.npy")
+)
+DRUG_MEDIAN_NAMES_PATH = os.getenv(
+    "CMAP_DRUG_MEDIAN_NAMES", os.path.join(DATA_DIR, "drug_median_names.csv")
+)
+DRUG_MEDIAN_GENE_IDS_PATH = os.getenv(
+    "CMAP_DRUG_MEDIAN_GENE_IDS", os.path.join(DATA_DIR, "drug_median_lm_gene_ids.csv")
+)
+
+# 随机签名 null 参数（🧑‍⚖️ 可用环境变量调整）
+NULL_CALIBRATION_N = int(os.getenv("CMAP_NULL_N", "10000"))
+NULL_CALIBRATION_SEED = int(os.getenv("CMAP_NULL_SEED", "0"))
+NULL_CALIBRATION_BATCH = int(os.getenv("CMAP_NULL_BATCH", "500"))
+NULL_CALIBRATION_MIN_GENES = int(os.getenv("CMAP_NULL_MIN_GENES", "10"))
+
 # Touchstone 核心参考数据库（用于 NCS 归一化和 Tau 计算）
 TOUCHSTONE_DIR = os.getenv("CMAP_TOUCHSTONE_DIR", os.path.join(PROJECT_ROOT, "touchstone_data"))
 TOUCHSTONE_GCTX_PATH = os.path.join(TOUCHSTONE_DIR, "touchstone_score.gctx")

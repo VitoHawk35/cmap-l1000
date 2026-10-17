@@ -25,6 +25,7 @@ from ..core.matrix_store import MatrixStore
 from ..core.post_processor import CMAPPostProcessor
 from ..core.job_store import create_job, get_job, update_job
 from ..scoring.wtcs_scorer import WTCSScorer
+from ..scoring.null_calibrator import get_null_calibrator
 from ..config import N_GENES, N_SIGS, ROW_NAMES_PATH, DEFAULT_TOP_K
 import pandas as pd
 
@@ -67,6 +68,62 @@ def get_post_processor() -> CMAPPostProcessor:
     if _post_processor is None:
         _post_processor = CMAPPostProcessor()
     return _post_processor
+
+
+def _null_calibration_fields(up_genes, down_genes):
+    """
+    计算查询内随机签名 null（C3 方案 B）。
+
+    Returns:
+        (lookup, status)
+        lookup: {pert_iname: {"p_value", "fdr", "null_z"}}
+        status: "ok" / "insufficient_landmark_genes" / "unavailable"
+
+    任何异常都只降级为 "unavailable"，绝不让 Tau 搜索失败。
+    """
+    status = "unavailable"
+    try:
+        calibrator = get_null_calibrator()
+        if calibrator is None:
+            return {}, status
+
+        df = calibrator.calibrate(up_genes, down_genes)
+        status = getattr(calibrator, "last_status", status)
+        if df is None or df.empty:
+            return {}, status
+
+        # 列名映射：DataFrame 用 p_reversal/fdr_reversal，API 用 p_value/fdr
+        lookup = {}
+        for _, row in df.iterrows():
+            lookup[str(row["pert_iname"])] = {
+                "p_value": float(row["p_reversal"]),
+                "fdr": float(row["fdr_reversal"]),
+                "null_z": float(row["null_z"]),
+            }
+        return lookup, status
+    except Exception as exc:
+        print("[Tau] null 校准失败，跳过（不影响搜索）: {}".format(exc))
+        return {}, "unavailable"
+
+
+def _tau_result_dict(result, null_lookup):
+    """把 PostProcessedResult 转成响应 dict，并按 pert_iname 左连接 null 字段。"""
+    fields = null_lookup.get(result.pert_iname, {})
+    return {
+        "rank": result.rank,
+        "pert_iname": result.pert_iname,
+        "pert_type": result.pert_type,
+        "tau_score": result.tau_score,
+        "summary_ncs": result.summary_ncs,
+        "best_wtcs": result.best_wtcs,
+        "cell_count": result.cell_count,
+        "best_cell_id": result.best_cell_id,
+        "best_dose": result.best_dose,
+        "is_touchstone": result.is_touchstone,
+        "p_value": fields.get("p_value"),
+        "fdr": fields.get("fdr"),
+        "null_z": fields.get("null_z"),
+    }
 
 
 def _run_tau_job(job_id: str, payload: dict):
@@ -143,44 +200,20 @@ def _run_tau_job(job_id: str, payload: dict):
             return_bottom_k=bottom_k
         )
 
-        # 5. 组装结果（用 dict 以便 json 序列化）
-        top_response = [
-            {
-                "rank": r.rank,
-                "pert_iname": r.pert_iname,
-                "pert_type": r.pert_type,
-                "tau_score": r.tau_score,
-                "summary_ncs": r.summary_ncs,
-                "best_wtcs": r.best_wtcs,
-                "cell_count": r.cell_count,
-                "best_cell_id": r.best_cell_id,
-                "best_dose": r.best_dose,
-                "is_touchstone": r.is_touchstone,
-            }
-            for r in top_results
-        ]
+        # 5. 查询内随机签名 null（失败只降级，不影响 Tau 搜索）
+        update_job(job_id, progress={"stage": "null_calibration", "percent": 97})
+        null_lookup, null_status = _null_calibration_fields(up_genes, down_genes)
 
-        bottom_response = [
-            {
-                "rank": r.rank,
-                "pert_iname": r.pert_iname,
-                "pert_type": r.pert_type,
-                "tau_score": r.tau_score,
-                "summary_ncs": r.summary_ncs,
-                "best_wtcs": r.best_wtcs,
-                "cell_count": r.cell_count,
-                "best_cell_id": r.best_cell_id,
-                "best_dose": r.best_dose,
-                "is_touchstone": r.is_touchstone,
-            }
-            for r in bottom_results
-        ]
+        # 6. 组装结果（用 dict 以便 json 序列化）
+        top_response = [_tau_result_dict(r, null_lookup) for r in top_results]
+        bottom_response = [_tau_result_dict(r, null_lookup) for r in bottom_results]
 
         result = {
             "query_up_count": len(up_indices),
             "query_down_count": len(down_indices),
             "top_results": top_response,
             "bottom_results": bottom_response,
+            "null_calibration": null_status,
         }
 
         update_job(job_id, status="completed", result=result, progress={"stage": "done", "percent": 100})
@@ -355,11 +388,21 @@ def search_tau(request: TauSearchRequest):
     print(f"  Top结果: {len(top_results)} 个药物, Bottom结果: {len(bottom_results)} 个药物")
     print(f"  耗时: {post_time:.2f}s")
 
+    # 4b. 查询内随机签名 null（失败只降级，不影响 Tau 搜索）
+    print("\n[Step 4b/5] 查询内随机签名 null（p 值 / FDR）...")
+    t_null = time.time()
+    null_lookup, null_status = _null_calibration_fields(
+        request.up_genes, request.down_genes
+    )
+    print(f"  null_calibration: {null_status}，耗时: {time.time()-t_null:.2f}s")
+
     # 5. 组装响应
     print("\n[Step 5/5] 组装响应...")
     t0 = time.time()
-    top_response = [
-        TauSearchResult(
+    top_response = []
+    for r in top_results:
+        fields = null_lookup.get(r.pert_iname, {})
+        top_response.append(TauSearchResult(
             rank=r.rank,
             pert_iname=r.pert_iname,
             pert_type=r.pert_type,
@@ -369,13 +412,16 @@ def search_tau(request: TauSearchRequest):
             cell_count=r.cell_count,
             best_cell_id=r.best_cell_id,
             best_dose=r.best_dose,
-            is_touchstone=r.is_touchstone
-        )
-        for r in top_results
-    ]
+            is_touchstone=r.is_touchstone,
+            p_value=fields.get("p_value"),
+            fdr=fields.get("fdr"),
+            null_z=fields.get("null_z"),
+        ))
 
-    bottom_response = [
-        TauSearchResult(
+    bottom_response = []
+    for r in bottom_results:
+        fields = null_lookup.get(r.pert_iname, {})
+        bottom_response.append(TauSearchResult(
             rank=r.rank,
             pert_iname=r.pert_iname,
             pert_type=r.pert_type,
@@ -385,10 +431,11 @@ def search_tau(request: TauSearchRequest):
             cell_count=r.cell_count,
             best_cell_id=r.best_cell_id,
             best_dose=r.best_dose,
-            is_touchstone=r.is_touchstone
-        )
-        for r in bottom_results
-    ]
+            is_touchstone=r.is_touchstone,
+            p_value=fields.get("p_value"),
+            fdr=fields.get("fdr"),
+            null_z=fields.get("null_z"),
+        ))
 
     print(f"  耗时: {time.time()-t0:.2f}s")
     print(f"\n{'='*60}")
@@ -400,5 +447,6 @@ def search_tau(request: TauSearchRequest):
         query_up_count=len(up_indices),
         query_down_count=len(down_indices),
         top_results=top_response,
-        bottom_results=bottom_response
+        bottom_results=bottom_response,
+        null_calibration=null_status,
     )
