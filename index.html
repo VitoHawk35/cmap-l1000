@@ -17,7 +17,7 @@
             --text-secondary: #707070;
             --border: #dfdfdf;
             --success: #11845b;
-            --warning: #a16207;
+            /* D3：删除色板外琥珀色 --warning，警示改用 --warn-bg(#ffdb13) 底 + 近黑字（§4.2 令牌） */
             --danger: #e2005a;
         }
 
@@ -56,7 +56,7 @@
         }
 
         .nav-tabs .nav-link:hover {
-            background: #f5f5f5;
+            background: #ededed;
             border-color: var(--border);
             color: var(--text);
         }
@@ -74,7 +74,7 @@
         }
 
         .card-header {
-            background: #f7f7f7;
+            background: #fafafa;
             border-bottom: 1px solid var(--border);
             padding: 0.75rem 1rem;
             color: var(--text);
@@ -133,7 +133,7 @@
         }
 
         .btn-outline:hover {
-            background: #f5f5f5;
+            background: #ededed;
             border-color: #c7c7c7;
             color: var(--text);
         }
@@ -159,7 +159,7 @@
         }
 
         .table thead th {
-            background: #f7f7f7;
+            background: #fafafa;
             border-bottom: 1px solid var(--border);
             color: var(--text-secondary);
             font-weight: 500;
@@ -198,10 +198,10 @@
             font-variant-numeric: tabular-nums;
         }
 
-        .rank-1 { background: #171717; color: #fff; }
-        .rank-2 { background: #707070; color: #fff; }
+        .rank-1 { background: #171717; color: #ffffff; }
+        .rank-2 { background: #707070; color: #ffffff; }
         .rank-3 { background: #b2b2b2; color: #171717; }
-        .rank-other { background: #f5f5f5; color: #707070; }
+        .rank-other { background: #ededed; color: #707070; }
 
         .guide-text {
             color: var(--text-secondary);
@@ -218,7 +218,7 @@
 
         .gene-tag {
             display: inline-block;
-            background: #f5f5f5;
+            background: #ededed;
             border-radius: 3px;
             padding: 0.125rem 0.5rem;
             margin: 0.125rem;
@@ -227,13 +227,13 @@
         }
 
         .result-info {
-            background: #f7f7f7;
+            background: #fafafa;
             border-radius: 6px;
             padding: 1rem;
         }
 
         .vector-preview {
-            background: #f7f7f7;
+            background: #fafafa;
             border: 1px solid var(--border);
             border-radius: 4px;
             padding: 0.75rem;
@@ -254,7 +254,7 @@
             background: rgba(226, 0, 90, 0.06);
             border: 1px solid rgba(226, 0, 90, 0.3);
             border-radius: 4px;
-            color: #b00047;
+            color: #b0004a;
             padding: 0.625rem 0.875rem;
             font-size: 0.875rem;
             margin-top: 0.75rem;
@@ -312,7 +312,7 @@
                                         class="form-control">
                                 </div>
 
-                                <div class="mb-3" style="background:#f7f7f7;border-radius:6px;padding:0.75rem;">
+                                <div class="mb-3" style="background:#fafafa;border-radius:6px;padding:0.75rem;">
                                     <div style="color:var(--text-secondary);font-size:0.75rem;margin-bottom:0.25rem;">
                                         <strong style="color:var(--text);font-weight:500;">文件必须包含以下列名（至少三列）：</strong>
                                     </div>
@@ -359,20 +359,20 @@
                                 </div>
 
                                 <!-- 无效基因展示 -->
-                                <div v-if="csvMissingUp.length > 0 || csvMissingDown.length > 0" class="mt-3" style="border:1px solid var(--border);border-radius:6px;padding:0.75rem;background:rgba(245,158,11,0.05);">
-                                    <div style="color:var(--warning);font-size:0.75rem;font-weight:500;margin-bottom:0.5rem;">
+                                <div v-if="csvMissingUp.length > 0 || csvMissingDown.length > 0" class="mt-3" style="border:1px solid var(--border);border-radius:6px;padding:0.75rem;background:#ffdb13;">
+                                    <div style="color:#171717;font-size:0.75rem;font-weight:500;margin-bottom:0.5rem;">
                                         ⚠ 以下基因无法识别（共 {{ csvMissingUp.length + csvMissingDown.length }} 个）
                                     </div>
                                     <div v-if="csvMissingUp.length > 0" style="margin-bottom:0.5rem;">
                                         <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.25rem;">上调基因中未识别（{{ csvMissingUp.length }}个）：</div>
                                         <div style="display:flex;flex-wrap:wrap;gap:0.25rem;">
-                                            <span v-for="g in csvMissingUp" :key="g" class="gene-tag" style="background:rgba(226,0,90,0.08);color:#b00047;">{{ g }}</span>
+                                            <span v-for="g in csvMissingUp" :key="g" class="gene-tag" style="background:rgba(226,0,90,0.08);color:#b0004a;">{{ g }}</span>
                                         </div>
                                     </div>
                                     <div v-if="csvMissingDown.length > 0">
                                         <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.25rem;">下调基因中未识别（{{ csvMissingDown.length }}个）：</div>
                                         <div style="display:flex;flex-wrap:wrap;gap:0.25rem;">
-                                            <span v-for="g in csvMissingDown" :key="g" class="gene-tag" style="background:rgba(226,0,90,0.08);color:#b00047;">{{ g }}</span>
+                                            <span v-for="g in csvMissingDown" :key="g" class="gene-tag" style="background:rgba(226,0,90,0.08);color:#b0004a;">{{ g }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -439,7 +439,7 @@
 
                                 <!-- 进度条 -->
                                 <div v-if="searchProgress.show" class="mt-3">
-                                    <div class="progress" style="height: 8px; background: #f5f5f5; border-radius: 4px; overflow: hidden;">
+                                    <div class="progress" style="height: 8px; background: #ededed; border-radius: 4px; overflow: hidden;">
                                         <div class="progress-bar" :style="{width: searchProgress.percent + '%', background: '#171717', height: '100%', transition: 'width 0.3s ease'}"></div>
                                     </div>
                                     <div class="count-text mt-1" style="display: flex; justify-content: space-between;">
@@ -543,7 +543,7 @@
                                                 </span>
                                             </td>
                                             <td>
-                                                <span v-if="result.is_touchstone" style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:#f5f5f5;color:#171717;">是</span>
+                                                <span v-if="result.is_touchstone" style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:#ededed;color:#171717;">是</span>
                                                 <span v-else style="font-size:0.7rem;color:var(--text-secondary);">-</span>
                                             </td>
                                             <td>
@@ -559,7 +559,7 @@
                                             </td>
                                             <td v-if="searchForm.algorithm === 'tau'">
                                                 <span v-if="result.fdr !== undefined && result.fdr !== null"
-                                                      :style="{ fontWeight: result.fdr < 0.05 ? '700' : '400', color: result.fdr > 0.25 ? 'var(--text-secondary)' : '' }">
+                                                      :style="{ fontWeight: result.fdr < 0.05 ? '500' : '400', color: result.fdr > 0.25 ? 'var(--text-secondary)' : (result.fdr < 0.05 ? '#171717' : '') }">
                                                     {{ result.fdr.toFixed(4) }}
                                                 </span>
                                                 <span v-else style="color:var(--text-secondary);">-</span>
@@ -672,10 +672,10 @@
     <script src="echarts.min.js"></script>
     <script>
         // ============ ECharts 主题 supabase-med（报告 3.6） ============
-        // 下调/逆转 ← 0 → 上调/加重
-        const DIV_COLORS = ['#054cff', '#7da0fa', '#f5f5f5', '#eb7aa7', '#e2005a'];
-        // 显著性：浅 → 深
-        const SEQ_COLORS = ['#f5f0fb', '#eddbf9', '#b9a6e8', '#644fc1', '#3b2a85'];
+        // 下调/逆转 ← 0 → 上调/加重（D3：中间档统一用令牌色的透明度变体，色板外颜色改冷色）
+        const DIV_COLORS = ['#054cff', 'rgba(5,76,255,0.45)', '#ededed', 'rgba(226,0,90,0.35)', '#e2005a'];
+        // 显著性：浅 → 深（D3：紫色序列改为靛蓝序列，全部落在 §4.2 令牌及其透明度变体内）
+        const SEQ_COLORS = ['#e6edff', 'rgba(5,76,255,0.3)', 'rgba(5,76,255,0.55)', '#054cff', '#0438c4'];
         const supabaseMedTheme = {
             color: ['#054cff', '#e2005a', '#707070'],
             backgroundColor: 'transparent',
@@ -688,7 +688,7 @@
                          splitLine: { lineStyle: { color: '#ededed', width: 1 } }, nameTextStyle: { color: '#707070' } },
             tooltip: { backgroundColor: '#ffffff', borderColor: '#dfdfdf', borderWidth: 1, padding: [8, 12],
                        textStyle: { color: '#171717', fontSize: 12 },
-                       extraCssText: 'border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.08);font-variant-numeric:tabular-nums;' },
+                       extraCssText: 'border-radius:6px;box-shadow:0 8px 24px rgba(23,23,23,.08);font-variant-numeric:tabular-nums;' },
             legend: { icon: 'roundRect', itemWidth: 10, itemHeight: 10, itemGap: 16, textStyle: { color: '#707070' } },
             line: { symbol: 'none', lineStyle: { width: 1.5 } },
             bar: { itemStyle: { borderRadius: [2, 2, 0, 0] }, barMaxWidth: 24 },
