@@ -11,7 +11,10 @@ import numpy as np
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 
-from ..config import SIG_INFO_PATH, COL_NAMES_PATH, N_SIGS
+from ..config import (
+    SIG_INFO_PATH, COL_NAMES_PATH, ROW_NAMES_PATH, MATRIX_PATH, N_SIGS,
+)
+from .lincs_integrity import check_startup as _check_lincs_integrity
 
 
 @dataclass
@@ -67,6 +70,17 @@ class MetadataIndex:
 
     def _build_sig_index(self) -> Dict[str, int]:
         """构建 sig_id -> 列索引的映射"""
+        # D1 防线1：构建映射前先做完整性检查（行/列花名册逐 ID 或指纹比对）。
+        # 花名册错位会静默读错签名，这里任何不一致都抛 RuntimeError 拒绝加载；
+        # 模式由 LINCS_INTEGRITY_MODE=gctx|fingerprint|off 选择（默认 fingerprint）。
+        _check_lincs_integrity(
+            matrix_path=MATRIX_PATH,
+            row_csv_path=ROW_NAMES_PATH,
+            col_csv_path=COL_NAMES_PATH,
+            row_label="row_gene_ids.csv",
+            col_label="col_sig_ids.csv",
+        )
+
         col_df = pd.read_csv(COL_NAMES_PATH)
         sig_ids = col_df['sig_id'].tolist()
 

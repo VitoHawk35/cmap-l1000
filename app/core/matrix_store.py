@@ -9,7 +9,8 @@ import os
 import numpy as np
 from typing import Optional, List
 
-from ..config import MATRIX_PATH, N_GENES, N_SIGS
+from ..config import MATRIX_PATH, COL_NAMES_PATH, ROW_NAMES_PATH, N_GENES, N_SIGS
+from .lincs_integrity import check_startup as _check_lincs_integrity
 
 
 class MatrixStore:
@@ -38,6 +39,17 @@ class MatrixStore:
                 f"矩阵文件不存在: {MATRIX_PATH}\n"
                 f"请先运行 01_build_memmap.py 生成数据文件"
             )
+
+        # D1 防线1：打开矩阵前做完整性检查（花名册与矩阵形状/抽样数值比对）。
+        # 任何不一致抛 RuntimeError 拒绝加载；
+        # 模式由 LINCS_INTEGRITY_MODE=gctx|fingerprint|off 选择（默认 fingerprint）。
+        _check_lincs_integrity(
+            matrix_path=MATRIX_PATH,
+            row_csv_path=ROW_NAMES_PATH,
+            col_csv_path=COL_NAMES_PATH,
+            row_label="row_gene_ids.csv",
+            col_label="col_sig_ids.csv",
+        )
 
         # 以只读模式打开 memmap
         self._matrix = np.memmap(
