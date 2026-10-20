@@ -161,6 +161,24 @@ def make_synthetic_data(data_dir: str, n_genes: int = N_GENES, n_sigs: int = N_S
         os.path.join(data_dir, "GSE92742_Broad_LINCS_gene_info.txt.gz"),
         sep="\t", compression="gzip", index=False)
 
+    # ---------- D1：完整性指纹（默认 fingerprint 模式启动检查要比对） ----------
+    # 注意：按文件路径加载共享模块，避免在环境变量设置前 import app.config。
+    import importlib.util as _ilu
+
+    _li_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "app", "core",
+        "lincs_integrity.py",
+    )
+    _spec = _ilu.spec_from_file_location("lincs_integrity", _li_path)
+    _li = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_li)
+    fingerprint = _li.build_fingerprint(
+        matrix_path=matrix_path,
+        row_csv_path=os.path.join(data_dir, "row_gene_ids.csv"),
+        col_csv_path=os.path.join(data_dir, "col_sig_ids.csv"),
+    )
+    _li.write_fingerprint(fingerprint, os.path.join(data_dir, "integrity.json"))
+
     return {
         "data_dir": data_dir,
         "n_genes": n_genes,
